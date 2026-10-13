@@ -8,6 +8,7 @@ import {
 } from '../helpers/db'
 import { sessionUser } from '../helpers/session'
 import { hashPassword, verifyPassword } from '@/lib/auth/password'
+import { isUniqueViolation } from '@/lib/db-errors'
 import type { AnswerMap, QuestionDef } from '@/lib/questions/engine'
 import { pruneHiddenAnswers } from '@/lib/questions/engine'
 
@@ -395,5 +396,26 @@ describeDb('credentials', () => {
         },
       }),
     ).rejects.toThrow()
+  })
+
+  /*
+   * Against the real error, not a hand-built one: the wizard's friendly "that
+   * number is already registered" depends on recognising exactly what Prisma
+   * throws through the pg adapter, and a mocked shape is what let that drift
+   * unnoticed for a month.
+   */
+  it('recognises the duplicate phone error the wizard turns into a friendly message', async () => {
+    await resetVolunteerData()
+    const base = { passwordHash: await hashPassword('Praise2026!') }
+    await db.user.create({ data: { ...base, email: 'owner@example.com', username: 'owner', phone: '+2348031234567' } })
+    const second = await db.user.create({ data: { ...base, email: 'second@example.com', username: 'second' } })
+
+    // The same write the wizard's personal step makes.
+    const error = await db.user
+      .update({ where: { id: second.id }, data: { phone: '+2348031234567' } })
+      .catch((caught: unknown) => caught)
+
+    expect(isUniqueViolation(error, 'phone')).toBe(true)
+    expect(isUniqueViolation(error, 'email')).toBe(false)
   })
 })

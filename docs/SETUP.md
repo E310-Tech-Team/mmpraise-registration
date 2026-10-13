@@ -131,3 +131,5 @@ The last Super Administrator cannot be demoted.
 | Emails not arriving | `SMTP_HOST` is unset — look in `storage/mail/` |
 | "Too many registration attempts" | The rate limiter. Wait, or clear `rate_limit_buckets` in development |
 | Uploads fail | Check `STORAGE_LOCAL_PATH` exists and is writable, and `MAX_UPLOAD_MB` |
+| Uploads fail with `KMS is not configured` | `S3_SERVER_SIDE_ENCRYPTION` is set but the store (usually MinIO) has no key. Unset it |
+| `Body exceeded … limit` in the logs | An upload is larger than `serverActions.bodySizeLimit` in `next.config.ts`. Keep that above every upload cap |

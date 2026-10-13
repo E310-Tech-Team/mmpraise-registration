@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
+import { isUniqueViolation } from '@/lib/db-errors'
 import type { AgeRange, Denomination, Gender } from '@/generated/prisma/enums'
 import { env } from '@/lib/env'
 import { audit } from '@/lib/audit'
@@ -45,23 +46,6 @@ import { formatDate } from '@/lib/utils'
  */
 
 const PHONE_TAKEN = 'This phone number is already registered to another volunteer'
-
-/**
- * Detect a unique-constraint violation on a specific column.
- *
- * Prisma reports `meta.target` as either a list of column names or the database
- * constraint name (for example "users_phone_key"), depending on the driver, so
- * both shapes are matched. Getting this wrong turns a friendly "that number is
- * already registered" message into an unhandled 500.
- */
-function isUniqueViolation(error: unknown, field: string): boolean {
-  const prismaError = error as { code?: string; meta?: { target?: string[] | string } }
-  if (prismaError?.code !== 'P2002') return false
-
-  const target = prismaError.meta?.target
-  const targets = Array.isArray(target) ? target : [target ?? '']
-  return targets.some((value) => String(value).toLowerCase().includes(field.toLowerCase()))
-}
 
 /** Guard: only a DRAFT application may be edited through the wizard. */
 async function requireEditableApplication() {
