@@ -84,7 +84,8 @@ class S3Driver implements StorageDriver {
         Body: body,
         ContentType: contentType,
         ACL: 'private',
-        ServerSideEncryption: 'AES256',
+        // Only when configured — see S3_SERVER_SIDE_ENCRYPTION in env.ts.
+        ...(env.S3_SERVER_SIDE_ENCRYPTION ? { ServerSideEncryption: env.S3_SERVER_SIDE_ENCRYPTION } : {}),
       }),
     )
   }

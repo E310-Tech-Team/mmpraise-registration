@@ -296,9 +296,10 @@ function FileAnswer({
     formData.append('file', file)
 
     startTransition(async () => {
-      const result = await uploadAnswerFileAction(question.id, formData)
-      if (!result.ok) {
-        setError(result.error)
+      // Caught here so a failed upload stays an inline error — see PhotoUpload.
+      const result = await uploadAnswerFileAction(question.id, formData).catch(() => null)
+      if (!result?.ok) {
+        setError(result?.error ?? 'We could not upload that file. Please try again.')
         setFileName(null)
         return
       }

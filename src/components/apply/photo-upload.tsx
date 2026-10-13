@@ -54,9 +54,13 @@ export function PhotoUpload({
     formData.append('file', file)
 
     startTransition(async () => {
-      const result = await uploadProfilePhotoAction(formData)
-      if (!result.ok) {
-        setLocalError(result.error)
+      // A thrown action (the store refusing the file, a request over the size
+      // limit, a dropped connection) must not escape the transition: React
+      // hands it to the nearest error boundary, and the volunteer loses the
+      // whole page — and everything typed on it — over one photo.
+      const result = await uploadProfilePhotoAction(formData).catch(() => null)
+      if (!result?.ok) {
+        setLocalError(result?.error ?? 'We could not upload your photo. Please try again.')
         setPreview(null)
         URL.revokeObjectURL(objectUrl)
         return

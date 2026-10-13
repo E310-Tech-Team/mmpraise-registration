@@ -127,7 +127,13 @@ Uploads are the highest-risk input, so each one is checked against its **actual 
    nosniff` and a restrictive CSP, and audits third-party reads.
 
 `STORAGE_DRIVER` switches between local disk (outside `public/`) and S3-compatible object storage
-without any call-site change.
+without any call-site change. Server-side encryption is requested only when
+`S3_SERVER_SIDE_ENCRYPTION` is set, because a store without a key (a bare MinIO) rejects the request.
+
+Every upload travels as a Server Action, so `serverActions.bodySizeLimit` in `next.config.ts` must stay
+above the largest upload cap — Next.js otherwise refuses the body before the action's own size check
+runs. Upload widgets catch a thrown action and show it inline; an uncaught one would replace the page
+with the error screen.
 
 ---
 

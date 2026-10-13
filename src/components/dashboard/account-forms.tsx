@@ -106,9 +106,11 @@ export function ProfilePhotoForm({ documentId }: { documentId: string | null }) 
     formData.append('file', file)
 
     startTransition(async () => {
-      const result = await updateProfilePhotoAction(formData)
-      if (!result.ok) {
-        setError(result.error)
+      // Caught here so a failed upload stays an inline error rather than
+      // replacing the page with the error screen.
+      const result = await updateProfilePhotoAction(formData).catch(() => null)
+      if (!result?.ok) {
+        setError(result?.error ?? 'We could not upload your photo. Please try again.')
         return
       }
       setCurrent(result.data.documentId)

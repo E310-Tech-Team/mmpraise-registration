@@ -30,6 +30,16 @@ const schema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   S3_ENDPOINT: z.string().optional(),
   S3_FORCE_PATH_STYLE: bool,
+  /**
+   * Ask the store to encrypt each object at rest. Off unless set: AWS S3 and
+   * Cloudflare R2 encrypt everything by default anyway, and a MinIO without a
+   * KMS key rejects every upload that asks — which is how photo uploads broke
+   * on 2026-09-16. Set it only where the store has a key configured.
+   */
+  S3_SERVER_SIDE_ENCRYPTION: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['AES256', 'aws:kms']).optional(),
+  ),
 
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().default(587),

@@ -89,6 +89,7 @@ Everything in the file needs a value. The ones that must not be left at their de
 | `DATABASE_URL` | Exactly `postgresql://mmp:<that password>@db:5432/mmp_registration` — the `db` hostname is the compose service. No `sslmode`: the connection never leaves Docker's internal network. |
 | `STORAGE_DRIVER` | `s3` |
 | `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_ENDPOINT` | Your bucket (Cloudflare R2 works: region `auto`, endpoint from the R2 dashboard). Keep it **private** — the app streams files through an authorising route, so public access is never needed. |
+| `S3_SERVER_SIDE_ENCRYPTION` | Leave **unset** unless the store has an encryption key configured. AWS S3 and R2 encrypt at rest anyway; a MinIO without a KMS key rejects every upload that asks, which stopped all profile photos from 2026-09-16 to 2026-10-13. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE` | Resend: `smtp.resend.com`, `465`, `true` |
 | `SMTP_USER`, `SMTP_PASSWORD` | Resend: literally `resend`, and an API key created in their dashboard |
 | `MAIL_FROM`, `SUPPORT_EMAIL` | `MMPraise Volunteers <volunteers@mmpraise.org>` — the domain must be verified in Resend first, or everything lands in spam or is refused |
