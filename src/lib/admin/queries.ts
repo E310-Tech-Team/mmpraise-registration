@@ -42,6 +42,9 @@ export type ApplicationFilters = {
 
 export const PER_PAGE_DEFAULT = 25
 
+/** `?status=everyone` — every application, drafts included (the dashboard's Total). */
+export const EVERYONE = 'everyone'
+
 const APPLICATION_STATUSES: readonly string[] = [
   'DRAFT',
   'SUBMITTED',
@@ -84,12 +87,16 @@ export function buildWhere(user: SessionUser, filters: ApplicationFilters): Pris
   const scope = departmentScope(user)
   const edition = eventConfig.edition
 
-  const where: Prisma.VolunteerApplicationWhereInput = {
-    // Drafts are the volunteer's private workspace and never appear in review
-    // lists — unless explicitly asked for by status (the dashboard's
-    // "In progress" tile needs exactly that view).
-    status: { not: 'DRAFT' },
-  }
+  /*
+   * Drafts stay out of review lists by default — a draft is somebody
+   * mid-wizard, not something to decide on. They come in when asked for:
+   * `status=DRAFT` for exactly the drafts (the follow-up list), or
+   * `status=everyone` for every application including drafts — the
+   * dashboard's Total. Without that second form, Total opened a list that
+   * silently dropped the drafts and showed the same people as Approved.
+   */
+  const where: Prisma.VolunteerApplicationWhereInput =
+    filters.status === EVERYONE ? {} : { status: { not: 'DRAFT' } }
 
   /*
    * Department now belongs to an edition, not to the application.
@@ -235,6 +242,9 @@ export async function listApplications(user: SessionUser, filters: ApplicationFi
         registrationId: true,
         status: true,
         submittedAt: true,
+        // How far a draft got, and when — what a follow-up call needs.
+        currentStep: true,
+        updatedAt: true,
         // Exactly one row, because `(applicationId, edition)` is unique.
         participations: {
           where: { edition: eventConfig.edition },

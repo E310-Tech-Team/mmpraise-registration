@@ -322,6 +322,8 @@ export async function getOverview(user: SessionUser) {
       registrationOpen: settings.registration_open,
     },
     applications: {
+      /** Everyone who has started, drafts included — `?status=everyone`. */
+      total: registered + appCount('DRAFT'),
       /** Non-draft — the same population as /admin/applications unfiltered. */
       registered,
       draft: appCount('DRAFT'),

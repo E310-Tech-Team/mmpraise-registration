@@ -22,6 +22,7 @@ import { Badge, Card, CardBody, CardHeader, buttonClass } from '@/components/ui/
 import { eventConfig, eventEndsAt, eventStartsAt, formatEventDateTime } from '@/config/site'
 import { can, requirePermission } from '@/lib/auth/rbac'
 import { getOverview } from '@/lib/admin/overview'
+import { EVERYONE } from '@/lib/admin/queries'
 import { percent } from '@/lib/admin/metrics'
 import { PROFILE_REVIEW_TRACKED_SINCE, STAGE_LABELS } from '@/lib/admin/participants'
 import { describeAction } from '@/lib/audit/labels'
@@ -51,6 +52,10 @@ export default async function AdminOverviewPage() {
   const maxCountry = Math.max(1, ...overview.distributions.byCountry.map((c) => c.count))
   const people = overview.migration?.people ?? null
   const stages = overview.migration?.stages ?? null
+  const canExport = can(user, 'application:export')
+  /** A per-tile CSV link, or nothing for viewers without export permission. */
+  const exportFor = (query: string) =>
+    canExport ? `/api/admin/export?format=csv${query ? `&${query}` : ''}` : undefined
 
   return (
     <div className="space-y-6">
@@ -172,48 +177,72 @@ export default async function AdminOverviewPage() {
             description="One-time standing: a person applies once and is approved once. Edition-independent."
           />
           <CardBody>
+            {/*
+              Total = Submitted + Draft, shown first and side by side so the
+              arithmetic is visible. Every tile opens its list and, for anyone
+              allowed to export, downloads exactly that list as CSV — the same
+              filter, so the file holds the number on the tile.
+            */}
             <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
               <Metric
-                label="Registered"
-                value={overview.applications.registered}
-                href="/admin/applications"
+                label="Total"
+                value={overview.applications.total}
+                href={`/admin/applications?status=${EVERYONE}`}
+                exportHref={exportFor(`status=${EVERYONE}`)}
               />
               <Metric
-                label="In progress (draft)"
+                label="Submitted"
+                value={overview.applications.registered}
+                href="/admin/applications"
+                exportHref={exportFor('')}
+                percent={percent(overview.applications.registered, overview.applications.total)}
+                percentOfLabel="of total"
+              />
+              <Metric
+                label="Draft"
                 value={overview.applications.draft}
                 href="/admin/applications?status=DRAFT"
+                exportHref={exportFor('status=DRAFT')}
+                tone={overview.applications.draft > 0 ? 'warning' : undefined}
+                percent={percent(overview.applications.draft, overview.applications.total)}
+                percentOfLabel="of total"
               />
               <Metric
                 label="Awaiting review"
                 value={overview.applications.awaitingReview}
                 href="/admin/applications?status=SUBMITTED,UNDER_REVIEW"
+                exportHref={exportFor('status=SUBMITTED,UNDER_REVIEW')}
                 tone={overview.applications.awaitingReview > 0 ? 'warning' : undefined}
                 percent={percent(overview.applications.awaitingReview, overview.applications.registered)}
-                percentOfLabel="of registered"
+                percentOfLabel="of submitted"
               />
               <Metric
                 label="Approved"
                 value={overview.applications.approved}
                 href="/admin/applications?status=APPROVED"
+                exportHref={exportFor('status=APPROVED')}
                 tone="success"
                 percent={percent(overview.applications.approved, overview.applications.registered)}
-                percentOfLabel="of registered"
+                percentOfLabel="of submitted"
               />
               <Metric
                 label="Waitlisted"
                 value={overview.applications.waitlisted}
                 href="/admin/applications?status=WAITLISTED"
+                exportHref={exportFor('status=WAITLISTED')}
               />
               <Metric
                 label="Not accepted"
                 value={overview.applications.rejected}
                 href="/admin/applications?status=REJECTED"
+                exportHref={exportFor('status=REJECTED')}
               />
             </ul>
             <p className="mt-4 text-xs text-muted">
               {overview.applications.submittedLast7Days} submitted in the last seven days
               {overview.applications.legacyStatuses > 0 &&
-                ` · registered includes ${overview.applications.legacyStatuses} in legacy statuses from before the registration/participation split`}
+                ` · submitted includes ${overview.applications.legacyStatuses} in legacy statuses from before the registration/participation split`}
+              . Draft exports include how far each person got and when they last saved, for follow-up
               .
             </p>
           </CardBody>

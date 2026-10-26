@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright'
+import Papa from 'papaparse'
 import { expect, test } from '@playwright/test'
 import { signIn } from './helpers'
 import { clearRateLimits, unlockAccounts } from './rate-limit'
@@ -153,6 +154,56 @@ test.describe('admin overview', () => {
         page.getByText(pattern),
         `${tile.href} should open ${tile.value}`,
       ).toBeVisible({ timeout: 30_000 })
+    }
+  })
+
+  /*
+   * Every Registrations tile downloads exactly its own people. Parsed with a
+   * real CSV parser, not by counting lines: free-text answers can contain line
+   * breaks inside quoted cells, and a line count would then over-report.
+   */
+  test('each registrations figure downloads a CSV of exactly that many people', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000)
+    const downloads = await page
+      .locator('main a[href^="/api/admin/export?format=csv"]')
+      .evaluateAll((links) =>
+        links.map((link) => ({
+          href: link.getAttribute('href') ?? '',
+          label: link.getAttribute('aria-label') ?? '',
+        })),
+      )
+    // Total, Submitted, Draft at minimum on the seeded dev data.
+    expect(downloads.length).toBeGreaterThanOrEqual(3)
+
+    for (const { href, label } of downloads) {
+      const claimed = Number(/the (\d+) /.exec(label)?.[1])
+      const response = await page.request.get(href)
+      expect(response.status(), href).toBe(200)
+      const parsed = Papa.parse<string[]>((await response.text()).trim(), { skipEmptyLines: true })
+      // One header row, then one row per person.
+      expect(parsed.data.length - 1, `${label} → ${href}`).toBe(claimed)
+    }
+  })
+
+  test('Total includes drafts, so it no longer opens the same list as Approved', async ({ page }) => {
+    const totalHref = await page
+      .getByRole('link', { name: /^total/i })
+      .first()
+      .getAttribute('href')
+    expect(totalHref).toBe('/admin/applications?status=everyone')
+
+    const draftExport = page.getByRole('link', { name: /download the \d+ draft as csv/i })
+    if (await draftExport.count()) {
+      const href = (await draftExport.getAttribute('href')) ?? ''
+      const csv = await (await page.request.get(href)).text()
+      const [header, ...rows] = Papa.parse<string[]>(csv.trim(), { skipEmptyLines: true }).data
+      const progress = header.findIndex((cell) => cell.includes('Progress'))
+      // The follow-up columns are present, and every row is a draft.
+      expect(progress).toBeGreaterThan(-1)
+      expect(header.some((cell) => cell === 'Last activity')).toBe(true)
+      for (const row of rows) expect(row[progress]).toMatch(/^Draft — stopped at step \d/)
     }
   })
 

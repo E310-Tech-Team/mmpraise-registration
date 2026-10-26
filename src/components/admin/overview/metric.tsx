@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -11,6 +12,7 @@ export function Metric({
   label,
   value,
   href,
+  exportHref,
   tone,
   percent,
   percentOfLabel,
@@ -18,6 +20,12 @@ export function Metric({
   label: string
   value: number
   href?: string
+  /**
+   * A CSV of exactly these people — the same filter the tile's list uses, so
+   * the file holds the number on the tile. Only passed when the viewer may
+   * export; the route re-checks the permission and audits every download.
+   */
+  exportHref?: string
   tone?: 'success' | 'warning' | 'danger'
   /** Whole percent, or null for "N/A" (zero denominator). Omit to hide. */
   percent?: number | null
@@ -55,6 +63,17 @@ export function Metric({
         </Link>
       ) : (
         body
+      )}
+      {exportHref && value > 0 && (
+        // A plain anchor, not <Link>: this is a file download, not a page.
+        <a
+          href={exportHref}
+          aria-label={`Download the ${value} ${label.toLowerCase()} as CSV`}
+          className="mt-1 inline-flex min-h-8 items-center gap-1 rounded-field text-xs text-muted underline-offset-2 hover:text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <Download aria-hidden className="size-3.5" />
+          CSV
+        </a>
       )}
     </li>
   )

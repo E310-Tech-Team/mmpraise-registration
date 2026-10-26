@@ -126,7 +126,8 @@ export function ApplicationFilters({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Filter label="Status" id="filter-status" value={current.status} onChange={(v) => apply({ status: v })}>
-          <option value="all">All statuses</option>
+          <option value="all">All submitted</option>
+          <option value="everyone">Everyone, including drafts</option>
           {/* The dashboard's combined queue, selectable here so its link round-trips. */}
           <option value="SUBMITTED,UNDER_REVIEW">Awaiting review (both)</option>
           <option value="DRAFT">In progress (draft)</option>

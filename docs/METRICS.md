@@ -23,11 +23,25 @@ Conventions:
 
 | Metric | Predicate | % of | Destination |
 |---|---|---|---|
-| Registered | `status != DRAFT` (includes legacy ASSIGNED/CHECKED_IN/COMPLETED, called out in a footnote) | — | `/admin/applications` |
-| In progress (draft) | `status = DRAFT` | — | `?status=DRAFT` |
-| Awaiting review | `status IN (SUBMITTED, UNDER_REVIEW)` | registered | `?status=SUBMITTED,UNDER_REVIEW` |
-| Approved / Waitlisted / Not accepted | exact status | registered (Approved) | `?status=…` |
+| Total | every application, drafts included (no status predicate) | — | `?status=everyone` |
+| Submitted | `status != DRAFT` (includes legacy ASSIGNED/CHECKED_IN/COMPLETED, called out in a footnote) | total | `/admin/applications` |
+| Draft | `status = DRAFT` | total | `?status=DRAFT` |
+| Awaiting review | `status IN (SUBMITTED, UNDER_REVIEW)` | submitted | `?status=SUBMITTED,UNDER_REVIEW` |
+| Approved / Waitlisted / Not accepted | exact status | submitted (Approved) | `?status=…` |
 | Submitted, last 7 days | `submittedAt ≥ now−7d` (rolling) | — | trend chart week buckets |
+
+Total used to link to the unfiltered list, whose base filter drops drafts, so
+it opened exactly the same people as Submitted (and, with nobody awaiting
+review, the same as Approved). `?status=everyone` is the one value that lifts
+the base `status != DRAFT` filter.
+
+**Per-tile CSV.** Every non-zero Registrations tile carries a "CSV" link to
+`/api/admin/export?format=csv&<the tile's own filter>` — same `buildWhere`, so
+the file holds exactly the number on the tile. Shown only with
+`application:export`; the route re-checks and audits (`application.exported`).
+Each row carries **Progress** ("Submitted", or "Draft — stopped at step N of 8
+(Step title)" from `currentStep`), **Last activity** (`updatedAt`) and
+**Account created**, so the Draft file works as a follow-up call list.
 
 ## This edition — entity: `EditionParticipation` for `eventConfig.edition`
 

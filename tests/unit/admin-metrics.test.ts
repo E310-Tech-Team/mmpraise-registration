@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { lagosDayEnd, lagosDayStart, percent } from '@/lib/admin/metrics'
-import { parseStatusFilter } from '@/lib/admin/queries'
+import { buildWhere, EVERYONE, parseStatusFilter } from '@/lib/admin/queries'
+import { applicationProgress } from '@/lib/admin/progress'
+import { sessionUser } from '../helpers/session'
 import { deriveStage, RESPONSE_STAGES } from '@/lib/admin/participants'
 
 /**
@@ -109,5 +111,43 @@ describe('deriveStage', () => {
     expect(
       deriveStage({ excluded: false, confirmed: true, started: true, activated: true, invited: false }),
     ).toBe('confirmed')
+  })
+})
+
+describe('the Total and Draft populations (dashboard follow-up)', () => {
+  const admin = sessionUser({ roles: ['SUPER_ADMIN'] })
+
+  it('leaves drafts out of an unfiltered list — the Submitted population', () => {
+    expect(buildWhere(admin, {}).status).toEqual({ not: 'DRAFT' })
+  })
+
+  it('includes drafts for status=everyone — the Total population', () => {
+    // The old dashboard linked Total to the unfiltered list, which dropped the
+    // drafts and so showed exactly the Approved people. Total must include them.
+    expect(buildWhere(admin, { status: EVERYONE }).status).toBeUndefined()
+  })
+
+  it('selects only drafts for status=DRAFT — the follow-up list', () => {
+    expect(buildWhere(admin, { status: 'DRAFT' }).status).toBe('DRAFT')
+  })
+})
+
+describe('applicationProgress', () => {
+  it('names the step a draft stopped at, for a follow-up call', () => {
+    expect(applicationProgress('DRAFT', 3)).toBe(
+      'Draft — stopped at step 3 of 8 (Professional)',
+    )
+  })
+
+  it('says a draft that never left step 1 stopped at Personal', () => {
+    expect(applicationProgress('DRAFT', 1)).toMatch(/step 1 of 8 \(Personal\)/)
+  })
+
+  it('falls back to step 1 for an out-of-range step rather than crashing', () => {
+    expect(applicationProgress('DRAFT', 99)).toMatch(/step 1 of 8/)
+  })
+
+  it('reports anything past draft simply as submitted', () => {
+    expect(applicationProgress('APPROVED', 8)).toBe('Submitted')
   })
 })
