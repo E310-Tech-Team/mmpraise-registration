@@ -36,6 +36,11 @@ export default async function ApplicationsPage({
     churchRegionId: params.churchRegionId,
     churchProvinceId: params.churchProvinceId,
     ageRange: params.ageRange,
+    confirmed: params.confirmed,
+    participation: params.participation,
+    submittedFrom: params.submittedFrom,
+    submittedTo: params.submittedTo,
+    imported: params.imported,
     page: params.page ? Number(params.page) : 1,
     sort: (params.sort as Filters['sort']) ?? 'newest',
   }

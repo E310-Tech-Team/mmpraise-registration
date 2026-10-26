@@ -42,6 +42,7 @@ export function BatchActions({
   importableRows,
   invitableRows,
   failedRows,
+  sendingInvitations = false,
   can,
 }: {
   batchId: string
@@ -49,6 +50,8 @@ export function BatchActions({
   importableRows: number
   invitableRows: number
   failedRows: number
+  /** An outreach run for this batch still has queued sends. */
+  sendingInvitations?: boolean
   can: { execute: boolean; invite: boolean; export: boolean }
 }) {
   const router = useRouter()
@@ -56,7 +59,7 @@ export function BatchActions({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
-  const running = isBatchRunning(status)
+  const running = isBatchRunning(status) || sendingInvitations
 
   /*
    * While work is queued, advance it and refresh.
@@ -64,7 +67,9 @@ export function BatchActions({
    * There is no separate scheduler in this deployment, so the screen that is
    * watching the import is also what drives it. Five seconds is slow enough not
    * to hammer the database and fast enough that a small batch appears to finish
-   * on its own. The interval stops the moment the batch leaves a running state.
+   * on its own. The interval stops the moment the batch leaves a running state
+   * and its invitations have all gone — sending honestly pauses when nobody
+   * has this screen open, and resumes when it is opened again.
    */
   useEffect(() => {
     if (!running || !can.execute) return

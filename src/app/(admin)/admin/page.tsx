@@ -13,12 +13,20 @@ import {
   Users,
 } from 'lucide-react'
 import { AdminCountdown } from '@/components/admin/admin-countdown'
+import { DistributionRow, Metric } from '@/components/admin/overview/metric'
+import { RefreshButton } from '@/components/admin/overview/refresh-button'
+import { ParticipationChart } from '@/components/admin/overview/charts/participation-chart'
+import { ResponseStagesChart } from '@/components/admin/overview/charts/response-stages-chart'
+import { SubmissionsTrendChart } from '@/components/admin/overview/charts/submissions-trend-chart'
 import { Badge, Card, CardBody, CardHeader, buttonClass } from '@/components/ui/primitives'
 import { eventConfig, eventEndsAt, eventStartsAt, formatEventDateTime } from '@/config/site'
 import { can, requirePermission } from '@/lib/auth/rbac'
-import { ACTIVITY_LABELS, getOverview } from '@/lib/admin/overview'
+import { getOverview } from '@/lib/admin/overview'
+import { percent } from '@/lib/admin/metrics'
+import { PROFILE_REVIEW_TRACKED_SINCE, STAGE_LABELS } from '@/lib/admin/participants'
+import { describeAction } from '@/lib/audit/labels'
 import { AGE_RANGES } from '@/lib/validation/registration'
-import { cn, formatDate } from '@/lib/utils'
+import { formatDate } from '@/lib/utils'
 
 export const metadata: Metadata = { title: 'Administration overview' }
 
@@ -27,11 +35,10 @@ export const metadata: Metadata = { title: 'Administration overview' }
  *
  * Ordered by the question it answers, top to bottom: *is anything on fire?* →
  * *where does the event stand?* → *how is the volunteer base moving?* → detail.
- * The old overview reported four totals and left the reader to infer the work;
- * here every actionable number is a link to the filtered view that resolves it.
- *
- * Bars stay plain divs sized by percentage — no chart library, so the page is
- * fast and every figure is readable to a screen reader.
+ * Two invariants hold everywhere: every figure is a link to the records behind
+ * it (asserted by e2e), and every percentage names its denominator. Charts are
+ * client islands over server-computed data; the accessible, keyboard path is
+ * each chart's own data table.
  */
 export default async function AdminOverviewPage() {
   const user = await requirePermission('application:review')
@@ -42,16 +49,24 @@ export default async function AdminOverviewPage() {
 
   const maxDepartment = Math.max(1, ...overview.distributions.byDepartment.map((d) => d.count))
   const maxCountry = Math.max(1, ...overview.distributions.byCountry.map((c) => c.count))
-  const maxTrend = Math.max(1, ...overview.trend.map((t) => t.count))
+  const people = overview.migration?.people ?? null
+  const stages = overview.migration?.stages ?? null
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl">Overview</h1>
-          <p className="mt-1 text-body">The operational state of the {eventConfig.editionLabel}.</p>
+          <p className="mt-1 text-body">
+            The operational state of the {eventConfig.editionLabel}.
+            {overview.departmentScoped && ' Figures are limited to your departments.'}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Updated {formatDate(overview.generatedAt, true)}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton />
           {can(user, 'migration:create') && (
             <Link
               href="/admin/previous-participants/new"
@@ -149,29 +164,41 @@ export default async function AdminOverviewPage() {
         </CardBody>
       </Card>
 
-      {/* ------------------------------------------- the two lifecycles */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+      {/* --------------------------------------------- the three populations */}
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <Card className="min-w-0">
           <CardHeader
             title="Registrations"
-            description="One-time standing: a person applies once and is approved once."
+            description="One-time standing: a person applies once and is approved once. Edition-independent."
           />
           <CardBody>
             <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Metric label="Total" value={overview.applications.total} href="/admin/applications" />
+              <Metric
+                label="Registered"
+                value={overview.applications.registered}
+                href="/admin/applications"
+              />
+              <Metric
+                label="In progress (draft)"
+                value={overview.applications.draft}
+                href="/admin/applications?status=DRAFT"
+              />
               <Metric
                 label="Awaiting review"
                 value={overview.applications.awaitingReview}
-                href="/admin/applications?status=SUBMITTED"
+                href="/admin/applications?status=SUBMITTED,UNDER_REVIEW"
                 tone={overview.applications.awaitingReview > 0 ? 'warning' : undefined}
+                percent={percent(overview.applications.awaitingReview, overview.applications.registered)}
+                percentOfLabel="of registered"
               />
               <Metric
                 label="Approved"
                 value={overview.applications.approved}
                 href="/admin/applications?status=APPROVED"
                 tone="success"
+                percent={percent(overview.applications.approved, overview.applications.registered)}
+                percentOfLabel="of registered"
               />
-              <Metric label="Draft" value={overview.applications.draft} />
               <Metric
                 label="Waitlisted"
                 value={overview.applications.waitlisted}
@@ -184,177 +211,300 @@ export default async function AdminOverviewPage() {
               />
             </ul>
             <p className="mt-4 text-xs text-muted">
-              {overview.applications.submittedThisWeek} submitted in the last seven days.
+              {overview.applications.submittedLast7Days} submitted in the last seven days
+              {overview.applications.legacyStatuses > 0 &&
+                ` · registered includes ${overview.applications.legacyStatuses} in legacy statuses from before the registration/participation split`}
+              .
             </p>
           </CardBody>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader
-            title={`${eventConfig.edition} participation`}
-            description="This edition: who has confirmed they are coming, and where they stand."
+            title={`This edition (${overview.edition})`}
+            description="Who has said “I am coming”, and where they stand."
           />
           <CardBody>
             <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              <Metric label="Confirmed" value={overview.participations.confirmed} tone="success" />
               <Metric
-                label="Not yet confirmed"
+                label="Confirmed"
+                value={overview.participations.confirmed}
+                href="/admin/applications?confirmed=1"
+                tone="success"
+              />
+              <Metric
+                label="Registered, not confirmed"
                 value={overview.participations.unconfirmed}
+                href="/admin/applications?status=SUBMITTED,UNDER_REVIEW,APPROVED,WAITLISTED&confirmed=0"
                 tone={overview.participations.unconfirmed > 0 ? 'warning' : undefined}
               />
-              <Metric label="Assigned to shifts" value={overview.participations.assigned} />
-              <Metric label="Checked in" value={overview.participations.checkedIn} />
-              <Metric label="Completed" value={overview.participations.completed} />
-              <Metric label="Withdrawn" value={overview.participations.withdrawn} />
+              <Metric
+                label="Assigned to shifts"
+                value={overview.participations.assigned}
+                href="/admin/applications?confirmed=1&participation=ASSIGNED"
+                percent={percent(overview.participations.assigned, overview.participations.confirmed)}
+                percentOfLabel="of confirmed"
+              />
+              <Metric
+                label="Checked in"
+                value={overview.participations.checkedIn}
+                href="/admin/applications?confirmed=1&participation=CHECKED_IN"
+                percent={percent(overview.participations.checkedIn, overview.participations.confirmed)}
+                percentOfLabel="of confirmed"
+              />
+              <Metric
+                label="Completed"
+                value={overview.participations.completed}
+                href="/admin/applications?confirmed=1&participation=COMPLETED"
+              />
+              <Metric
+                label="Withdrawn"
+                value={overview.participations.withdrawn}
+                href="/admin/applications?participation=WITHDRAWN"
+                percent={percent(
+                  overview.participations.withdrawn,
+                  overview.participations.confirmed + overview.participations.withdrawn,
+                )}
+                percentOfLabel="of ever-confirmed"
+              />
             </ul>
             <p className="mt-4 text-xs text-muted">
-              “Not yet confirmed” counts registered volunteers with no confirmed availability for
-              this edition — the number the invitation campaign exists to drive down.
+              Confirmed = said they are coming, not withdrawn, application not rejected. “Registered,
+              not confirmed” counts registered volunteers only — previous participants who have not
+              responded are in the next card, and the two overlap once a migrated person registers.
             </p>
           </CardBody>
         </Card>
-      </div>
 
-      {/* ------------------------------------------- migration and comms */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {overview.migration && (
-          <Card>
+        {overview.migration && people && (
+          <Card className="min-w-0 lg:col-span-2 xl:col-span-1">
             <CardHeader
               title="Previous participants"
-              description="The legacy import and its activation."
+              description="People, not import rows — one figure per person however many files mention them."
               action={
                 <Link
                   href="/admin/previous-participants"
                   className={buttonClass({ variant: 'ghost', size: 'sm' })}
                 >
-                  Open
+                  Imports
                 </Link>
               }
             />
             <CardBody>
               <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Metric
-                  label="Imported"
-                  value={overview.migration.imported}
-                  href="/admin/previous-participants"
-                />
-                <Metric label="Invited" value={overview.migration.invitesSent} />
-                <Metric label="Activated" value={overview.migration.activated} tone="success" />
-                <Metric label="Profiles reviewed" value={overview.migration.reviewed} />
-                <Metric
-                  label="Failed invites"
-                  value={overview.migration.invitesFailed}
-                  tone={overview.migration.invitesFailed > 0 ? 'danger' : undefined}
+                  label="People"
+                  value={people.total}
+                  href="/admin/previous-participants/people"
                 />
                 <Metric
-                  label="Failed rows"
-                  value={overview.migration.failedRows}
-                  tone={overview.migration.failedRows > 0 ? 'danger' : undefined}
+                  label="Invited"
+                  value={people.invitedEver}
+                  href="/admin/previous-participants/people?invited=1"
+                  percent={percent(people.invitedEver, people.invitable)}
+                  percentOfLabel="of invitable"
+                />
+                <Metric
+                  label="Activated"
+                  value={people.activated}
+                  href="/admin/previous-participants/people?activated=1"
+                  tone="success"
+                  percent={percent(people.activated, people.total - people.excluded)}
+                  percentOfLabel="of contactable"
+                />
+                <Metric
+                  label="Profiles reviewed"
+                  value={people.reviewed}
+                  href="/admin/previous-participants/people?reviewed=1"
+                  percent={percent(people.reviewed, people.activated)}
+                  percentOfLabel="of activated"
+                />
+                <Metric
+                  label="Confirmed this edition"
+                  value={people.confirmed}
+                  href="/admin/previous-participants/people?stage=confirmed"
+                  tone="success"
+                  percent={percent(people.confirmed, people.total - people.excluded)}
+                  percentOfLabel="response rate"
+                />
+                <Metric
+                  label="Not yet responded"
+                  value={people.unresponded}
+                  href="/admin/previous-participants/people?responded=0"
+                  tone={people.unresponded > 0 ? 'warning' : undefined}
+                  percent={percent(people.unresponded, people.total - people.excluded)}
+                  percentOfLabel="of contactable"
                 />
               </ul>
-              {overview.migration.runningBatches > 0 && (
-                <p className="mt-4 text-xs text-muted" aria-live="polite">
-                  {overview.migration.runningBatches}{' '}
-                  {overview.migration.runningBatches === 1 ? 'import is' : 'imports are'} running now.
-                </p>
-              )}
-            </CardBody>
-          </Card>
-        )}
-
-        {overview.comms && (
-          <Card>
-            <CardHeader
-              title="Communications"
-              description="What the public has sent, and what left here."
-            />
-            <CardBody>
-              <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                <Metric
-                  label="New messages"
-                  value={overview.comms.newMessages}
-                  href="/admin/messages"
-                  tone={overview.comms.newMessages > 0 ? 'warning' : undefined}
-                />
-                <Metric
-                  label="Pending testimonies"
-                  value={overview.comms.pendingTestimonies}
-                  href="/admin/testimonies"
-                  tone={overview.comms.pendingTestimonies > 0 ? 'warning' : undefined}
-                />
-                <Metric
-                  label="Failed emails"
-                  value={overview.comms.failedEmails}
-                  tone={overview.comms.failedEmails > 0 ? 'danger' : undefined}
-                />
-              </ul>
+              <p className="mt-4 text-xs text-muted">
+                Contactable = all previous participants minus the {people.excluded} excluded from
+                contact. Profile reviews are tracked from{' '}
+                {formatDate(PROFILE_REVIEW_TRACKED_SINCE)} — earlier history was never recorded.
+                {overview.migration.runningBatches > 0 && (
+                  <span aria-live="polite">
+                    {' '}
+                    {overview.migration.runningBatches}{' '}
+                    {overview.migration.runningBatches === 1 ? 'import is' : 'imports are'} running
+                    now.
+                  </span>
+                )}
+                {overview.migration.sendsInFlight > 0 &&
+                  ` ${overview.migration.sendsInFlight} emails are queued to send.`}
+              </p>
             </CardBody>
           </Card>
         )}
       </div>
 
-      {/* ----------------------------------------------------- analytics */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+      {/* --------------------------------------------------------- charts */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <Card className="min-w-0">
           <CardHeader
-            title="Submissions, last eight weeks"
-            description="New registrations submitted per week."
+            title="Submissions over time"
+            description={`Applications submitted per week, last 12 weeks, Lagos time (WAT)${
+              overview.departmentScoped ? ', your departments only' : ''
+            }. The newest bar is the current, partial week.`}
           />
           <CardBody>
-            {overview.trend.length === 0 ? (
-              <p className="text-sm text-muted">No submissions in the last eight weeks.</p>
-            ) : (
-              <ol className="flex h-32 items-end gap-2" aria-hidden>
-                {overview.trend.map((point) => (
-                  <li key={point.week.toISOString()} className="flex flex-1 flex-col items-center gap-1">
-                    <span className="text-xs tabular-nums text-muted">{point.count}</span>
-                    <span
-                      className="w-full rounded-t bg-primary"
-                      style={{
-                        height: `${Math.max(6, Math.round((point.count / maxTrend) * 100))}%`,
-                      }}
-                    />
-                    <span className="text-[0.625rem] text-muted">
-                      {formatDate(point.week).slice(0, 6)}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            )}
-            {/* The numbers, readable without the bars. */}
-            <p className="sr-only">
-              Weekly submissions:{' '}
-              {overview.trend.map((point) => `${formatDate(point.week)}: ${point.count}`).join('; ')}.
-            </p>
+            <SubmissionsTrendChart data={overview.trend} />
           </CardBody>
         </Card>
 
-        <Card>
+        {stages && people && (
+          <Card className="min-w-0">
+            <CardHeader
+              title="Previous-participant response"
+              description={`Where all ${people.total} previous participants stand — one stage per person.`}
+            />
+            <CardBody>
+              <ResponseStagesChart
+                total={people.total}
+                slices={[
+                  {
+                    key: 'confirmed',
+                    label: STAGE_LABELS.confirmed,
+                    count: stages.confirmed,
+                    tone: 'success',
+                    href: '/admin/previous-participants/people?stage=confirmed',
+                  },
+                  {
+                    key: 'started',
+                    label: STAGE_LABELS.started,
+                    count: stages.started,
+                    tone: 'info',
+                    href: '/admin/previous-participants/people?stage=started',
+                  },
+                  {
+                    key: 'activated',
+                    label: STAGE_LABELS.activated,
+                    count: stages.activated,
+                    tone: 'brand',
+                    href: '/admin/previous-participants/people?stage=activated',
+                  },
+                  {
+                    key: 'invited',
+                    label: STAGE_LABELS.invited,
+                    count: stages.invited,
+                    tone: 'primary',
+                    href: '/admin/previous-participants/people?stage=invited',
+                  },
+                  {
+                    key: 'not_invited',
+                    label: STAGE_LABELS.not_invited,
+                    count: stages.not_invited,
+                    tone: 'muted',
+                    href: '/admin/previous-participants/people?stage=not_invited',
+                  },
+                  {
+                    key: 'excluded',
+                    label: STAGE_LABELS.excluded,
+                    count: stages.excluded,
+                    tone: 'line',
+                    href: '/admin/previous-participants/people?stage=excluded',
+                  },
+                ]}
+              />
+            </CardBody>
+          </Card>
+        )}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="min-w-0">
+          <CardHeader
+            title="Participation status"
+            description={`Confirmed ${overview.edition} volunteers by where they stand; withdrawn shown beside them.`}
+          />
+          <CardBody>
+            <ParticipationChart
+              rows={[
+                {
+                  key: 'signedUp',
+                  label: 'Signed up',
+                  count: overview.participations.signedUp,
+                  tone: 'info',
+                  href: '/admin/applications?confirmed=1&participation=SIGNED_UP',
+                },
+                {
+                  key: 'assigned',
+                  label: 'Assigned to shifts',
+                  count: overview.participations.assigned,
+                  tone: 'primary',
+                  href: '/admin/applications?confirmed=1&participation=ASSIGNED',
+                },
+                {
+                  key: 'checkedIn',
+                  label: 'Checked in',
+                  count: overview.participations.checkedIn,
+                  tone: 'brand',
+                  href: '/admin/applications?confirmed=1&participation=CHECKED_IN',
+                },
+                {
+                  key: 'completed',
+                  label: 'Completed',
+                  count: overview.participations.completed,
+                  tone: 'success',
+                  href: '/admin/applications?confirmed=1&participation=COMPLETED',
+                },
+                {
+                  key: 'withdrawn',
+                  label: 'Withdrawn',
+                  count: overview.participations.withdrawn,
+                  tone: 'danger',
+                  href: '/admin/applications?participation=WITHDRAWN',
+                },
+              ]}
+            />
+          </CardBody>
+        </Card>
+
+        <Card className="min-w-0">
           <CardHeader
             title="By department"
-            description={`Where confirmed ${eventConfig.edition} volunteers are serving. Distribution only — departments have no cap.`}
+            description={`Where confirmed ${overview.edition} volunteers are serving. Distribution only — departments have no cap.`}
           />
           <CardBody>
-            {overview.distributions.byDepartment.length === 0 ? (
-              <p className="text-sm text-muted">Nobody has confirmed a department yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {overview.distributions.byDepartment.map((row) => (
-                  <DistributionRow
-                    key={row.id ?? row.name}
-                    label={row.name}
-                    count={row.count}
-                    max={maxDepartment}
-                    href={row.id ? `/admin/applications?departmentId=${row.id}` : null}
-                  />
-                ))}
-              </ul>
-            )}
+            <ul className="space-y-3">
+              {overview.distributions.byDepartment.length === 0 && (
+                <li className="text-sm text-muted">Nobody has confirmed a department yet.</li>
+              )}
+              {overview.distributions.byDepartment.map((row) => (
+                <DistributionRow
+                  key={row.id ?? 'none'}
+                  label={row.name}
+                  count={row.count}
+                  max={maxDepartment}
+                  href={`/admin/applications?confirmed=1&departmentId=${row.id ?? 'none'}`}
+                />
+              ))}
+            </ul>
           </CardBody>
         </Card>
+      </div>
 
-        <Card>
-          <CardHeader title="Top countries" />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="min-w-0">
+          <CardHeader title="Top countries" description="Registered volunteers by country of residence." />
           <CardBody>
             <ul className="space-y-3">
               {overview.distributions.byCountry.length === 0 && (
@@ -362,7 +512,7 @@ export default async function AdminOverviewPage() {
               )}
               {overview.distributions.byCountry.map((row) => (
                 <DistributionRow
-                  key={row.id ?? row.name}
+                  key={row.id ?? 'unknown'}
                   label={row.name}
                   count={row.count}
                   max={maxCountry}
@@ -374,41 +524,70 @@ export default async function AdminOverviewPage() {
           </CardBody>
         </Card>
 
-        <Card>
-          <CardHeader title="By age range" />
+        <Card className="min-w-0">
+          <CardHeader title="Age ranges" description="Registered volunteers by age range." />
           <CardBody>
-            <ul className="grid gap-2 sm:grid-cols-2">
+            <ul className="space-y-3">
               {overview.distributions.byAgeRange.length === 0 && (
                 <li className="text-sm text-muted">No applications yet.</li>
               )}
-              {overview.distributions.byAgeRange.map((row) => {
-                const label = AGE_RANGES.find((a) => a.value === row.ageRange)?.label ?? 'Not given'
-                const inner = (
-                  <>
-                    <span className="text-body group-hover:underline">{label}</span>
-                    <span className="font-semibold tabular-nums text-ink">{row.count}</span>
-                  </>
-                )
-                return (
-                  <li key={row.ageRange ?? 'unknown'}>
-                    {row.ageRange ? (
-                      <Link
-                        href={`/admin/applications?ageRange=${row.ageRange}`}
-                        aria-label={`${label}: ${row.count}. View these volunteers.`}
-                        className="group flex items-center justify-between gap-3 rounded-field text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                      >
-                        {inner}
-                      </Link>
-                    ) : (
-                      <div className="flex items-center justify-between gap-3 text-sm">{inner}</div>
-                    )}
-                  </li>
-                )
-              })}
+              {overview.distributions.byAgeRange.map((row) => (
+                <DistributionRow
+                  key={row.ageRange ?? 'unknown'}
+                  label={
+                    AGE_RANGES.find((range) => range.value === row.ageRange)?.label ??
+                    row.ageRange ??
+                    'Not given'
+                  }
+                  count={row.count}
+                  max={Math.max(1, ...overview.distributions.byAgeRange.map((r) => r.count))}
+                  href={row.ageRange ? `/admin/applications?ageRange=${row.ageRange}` : null}
+                />
+              ))}
             </ul>
           </CardBody>
         </Card>
       </div>
+
+      {/* ---------------------------------------------------- communications */}
+      {overview.comms && (
+        <Card>
+          <CardHeader title="Communications" description="What the public has sent." />
+          <CardBody>
+            <ul className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {overview.comms.newMessages !== null && (
+                <Metric
+                  label="New messages"
+                  value={overview.comms.newMessages}
+                  href="/admin/messages"
+                  tone={overview.comms.newMessages > 0 ? 'warning' : undefined}
+                />
+              )}
+              {overview.comms.pendingTestimonies !== null && (
+                <Metric
+                  label="Pending testimonies"
+                  value={overview.comms.pendingTestimonies}
+                  href="/admin/testimonies"
+                  tone={overview.comms.pendingTestimonies > 0 ? 'warning' : undefined}
+                />
+              )}
+              {overview.migration && (
+                <Metric
+                  label="Failed invitation emails"
+                  value={overview.migration.failedInvitationRows}
+                  href="/admin/previous-participants/rows?invitation=FAILED"
+                  tone={overview.migration.failedInvitationRows > 0 ? 'danger' : undefined}
+                />
+              )}
+            </ul>
+            <p className="mt-4 text-xs text-muted">
+              Message and testimony counts match their inboxes’ default view (test data and spam
+              hidden). “Failed invitation emails” covers invitation sends only — other mail is not
+              centrally tracked yet.
+            </p>
+          </CardBody>
+        </Card>
+      )}
 
       {/* ------------------------------------------------ recent activity */}
       {overview.recentActivity.length > 0 && (
@@ -430,8 +609,10 @@ export default async function AdminOverviewPage() {
                   className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm"
                 >
                   <span className="text-body">
-                    {ACTIVITY_LABELS[entry.action] ?? entry.action}
-                    {entry.actor && <span className="text-muted"> — {entry.actor.username}</span>}
+                    <span className="font-medium text-ink">
+                      {entry.actor?.username ?? 'The system'}
+                    </span>{' '}
+                    {describeAction(entry.action).label}
                   </span>
                   <span className="text-xs tabular-nums text-muted">
                     {formatDate(entry.createdAt, true)}
@@ -453,115 +634,21 @@ export default async function AdminOverviewPage() {
           </Link>
           {can(user, 'migration:view') && (
             <Link
-              href="/admin/previous-participants"
+              href="/admin/previous-participants/people"
               className={buttonClass({ variant: 'outline', size: 'sm' })}
             >
               <UserPlus aria-hidden className="size-4" />
               Previous participants
             </Link>
           )}
-          <Link href="/admin/messages" className={buttonClass({ variant: 'outline', size: 'sm' })}>
-            <Inbox aria-hidden className="size-4" />
-            Messages
-          </Link>
+          {can(user, 'contact:manage') && (
+            <Link href="/admin/messages" className={buttonClass({ variant: 'outline', size: 'sm' })}>
+              <Inbox aria-hidden className="size-4" />
+              Messages
+            </Link>
+          )}
         </CardBody>
       </Card>
     </div>
-  )
-}
-
-/** One figure. A link when there is a view that resolves it. */
-function Metric({
-  label,
-  value,
-  href,
-  tone,
-}: {
-  label: string
-  value: number
-  href?: string
-  tone?: 'success' | 'warning' | 'danger'
-}) {
-  const colour =
-    tone === 'success'
-      ? 'text-success'
-      : tone === 'warning'
-        ? 'text-warning'
-        : tone === 'danger'
-          ? 'text-danger'
-          : 'text-ink'
-
-  const body = (
-    <>
-      <span className="block text-xs uppercase tracking-wide text-muted">{label}</span>
-      <span className={`mt-0.5 block font-display text-2xl font-bold tabular-nums ${colour}`}>
-        {value}
-      </span>
-    </>
-  )
-
-  return (
-    <li>
-      {href ? (
-        <Link href={href} className="-m-1 block rounded-field p-1 hover:bg-surface-sunken">
-          {body}
-        </Link>
-      ) : (
-        body
-      )}
-    </li>
-  )
-}
-
-/**
- * One row of a distribution: a label, a count, and a bar.
- *
- * The bar is decorative, so the link's accessible name carries the figure and
- * says what following it does. When a segment cannot be expressed as a filter
- * — "No department yet", an unknown country — it stays plain text rather than
- * offering a link that would filter on nothing.
- */
-function DistributionRow({
-  label,
-  count,
-  max,
-  href,
-  tone = 'primary',
-}: {
-  label: string
-  count: number
-  max: number
-  href: string | null
-  tone?: 'primary' | 'brand'
-}) {
-  const body = (
-    <>
-      <div className="flex items-baseline justify-between gap-4 text-sm">
-        <span className="font-medium text-ink group-hover:underline">{label}</span>
-        <span className="tabular-nums text-muted">{count}</span>
-      </div>
-      <div className="mt-1 h-2 w-full overflow-hidden rounded-pill bg-line" role="presentation">
-        <div
-          className={cn('h-full rounded-pill', tone === 'brand' ? 'bg-brand' : 'bg-primary')}
-          style={{ width: `${Math.round((count / max) * 100)}%` }}
-        />
-      </div>
-    </>
-  )
-
-  return (
-    <li>
-      {href ? (
-        <Link
-          href={href}
-          aria-label={`${label}: ${count}. View these volunteers.`}
-          className="group block rounded-field focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-        >
-          {body}
-        </Link>
-      ) : (
-        body
-      )}
-    </li>
   )
 }

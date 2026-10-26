@@ -242,3 +242,80 @@ Questions? Write to ${params.supportEmail}.`
   // `to` is filled in by the caller, matching the other templates here.
   return { to: '', subject: 'Your MMPraise volunteer account is ready', html, text }
 }
+
+/**
+ * Reminder to someone whose migrated account has never been activated.
+ *
+ * Same security posture as the invitation: no token, no credential — the
+ * button leads to the ordinary forgot-password flow, which proves control of
+ * the mailbox before granting anything.
+ */
+export function reminderUnactivatedEmail(params: {
+  name: string
+  edition: string
+  resetUrl: string
+  supportEmail: string
+}): MailMessage {
+  const html = layout(
+    'Your volunteer account is still waiting',
+    `<p>Hello ${escapeHtml(params.name)},</p>
+     <p>A while ago we wrote to say your Marathon Messiah’s Praise volunteer record had moved to our new platform. Your account is still waiting — <strong>you do not need to register again</strong>, just set a password:</p>
+     ${button(params.resetUrl, 'Set your password')}
+     <p>Enter this same email address on that page and follow the secure link we send you.</p>
+     <p style="font-size:13px;color:#5a5a5a;">If you would rather not volunteer this time, you can simply ignore this email — nothing changes until you set a password. Questions? Write to ${escapeHtml(params.supportEmail)}.</p>`,
+  )
+
+  const text = `Hello ${params.name},
+
+A while ago we wrote to say your Marathon Messiah's Praise volunteer record had moved to our new platform. Your account is still waiting - you do not need to register again, just set a password:
+
+${params.resetUrl}
+
+Enter this same email address on that page and follow the secure link we send you.
+
+If you would rather not volunteer this time, you can simply ignore this email - nothing changes until you set a password.
+
+Questions? Write to ${params.supportEmail}.`
+
+  return { to: '', subject: 'Your MMPraise volunteer account is still waiting', html, text }
+}
+
+/**
+ * Reminder to someone who can sign in but has not confirmed availability for
+ * the edition. Covers migrated and fresh registrants alike; the ask is the
+ * same two-minute confirmation either way.
+ */
+export function reminderUnconfirmedEmail(params: {
+  name: string
+  edition: string
+  applyUrl: string
+  supportEmail: string
+}): MailMessage {
+  const html = layout(
+    `Are you serving at the ${escapeHtml(params.edition)} edition?`,
+    `<p>Hello ${escapeHtml(params.name)},</p>
+     <p>Planning for Marathon Messiah’s Praise ${escapeHtml(params.edition)} is under way, and we have not yet heard whether you are available to serve this edition.</p>
+     <p>Confirming takes about two minutes — sign in, tell us your availability and department, and you are done:</p>
+     ${button(params.applyUrl, 'Confirm your availability')}
+     <p style="font-size:13px;color:#5a5a5a;">If you cannot serve this time, no reply is needed — we will simply plan without you, and you are always welcome back. Questions? Write to ${escapeHtml(params.supportEmail)}.</p>`,
+  )
+
+  const text = `Hello ${params.name},
+
+Planning for Marathon Messiah's Praise ${params.edition} is under way, and we have not yet heard whether you are available to serve this edition.
+
+Confirming takes about two minutes - sign in, tell us your availability and department, and you are done:
+
+${params.applyUrl}
+
+If you cannot serve this time, no reply is needed - we will simply plan without you, and you are always welcome back.
+
+Questions? Write to ${params.supportEmail}.`
+
+  return {
+    to: '',
+    subject: `Are you serving at Marathon Messiah's Praise ${params.edition}?`,
+    html,
+    text,
+  }
+}

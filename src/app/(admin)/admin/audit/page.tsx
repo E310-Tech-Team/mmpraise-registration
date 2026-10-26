@@ -17,6 +17,7 @@ import {
   type AuditCategory,
 } from '@/lib/audit/labels'
 import { requirePermission } from '@/lib/auth/rbac'
+import { lagosDayEnd, lagosDayStart } from '@/lib/admin/metrics'
 import { db } from '@/lib/db'
 import { formatDate } from '@/lib/utils'
 import type { Prisma } from '@/generated/prisma/client'
@@ -63,10 +64,14 @@ export default async function AuditPage({
   )
   const actor = params.actor?.trim() ?? ''
 
-  const from = params.from && !Number.isNaN(Date.parse(params.from)) ? new Date(params.from) : null
-  const to = params.to && !Number.isNaN(Date.parse(params.to)) ? new Date(params.to) : null
-  // An end date is meant inclusively — "to the 5th" includes the 5th.
-  if (to) to.setHours(23, 59, 59, 999)
+  /*
+   * Day bounds in Lagos time — "to the 5th" means the 5th as the organisation
+   * experiences it, inclusively. This used to use the server's local midnight,
+   * which silently shifted the window whenever the host's timezone differed.
+   */
+  const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+  const from = params.from && DATE_ONLY.test(params.from) ? lagosDayStart(params.from) : null
+  const to = params.to && DATE_ONLY.test(params.to) ? lagosDayEnd(params.to) : null
 
   const where: Prisma.AuditLogWhereInput = {
     ...(params.action ? { action: params.action } : {}),

@@ -2,9 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { db } from '@/lib/db'
+import { isUniqueViolation } from '@/lib/db-errors'
 import type { AgeRange, Denomination, Gender } from '@/generated/prisma/enums'
 import { env } from '@/lib/env'
 import { audit } from '@/lib/audit'
+import { recordProfileReviewed } from '@/lib/migration/activity'
 import { requireUser } from '@/lib/auth/rbac'
 import { headers } from 'next/headers'
 import { clientIp } from '@/lib/auth/session'
@@ -45,23 +47,6 @@ import { formatDate } from '@/lib/utils'
  */
 
 const PHONE_TAKEN = 'This phone number is already registered to another volunteer'
-
-/**
- * Detect a unique-constraint violation on a specific column.
- *
- * Prisma reports `meta.target` as either a list of column names or the database
- * constraint name (for example "users_phone_key"), depending on the driver, so
- * both shapes are matched. Getting this wrong turns a friendly "that number is
- * already registered" message into an unhandled 500.
- */
-function isUniqueViolation(error: unknown, field: string): boolean {
-  const prismaError = error as { code?: string; meta?: { target?: string[] | string } }
-  if (prismaError?.code !== 'P2002') return false
-
-  const target = prismaError.meta?.target
-  const targets = Array.isArray(target) ? target : [target ?? '']
-  return targets.some((value) => String(value).toLowerCase().includes(field.toLowerCase()))
-}
 
 /** Guard: only a DRAFT application may be edited through the wizard. */
 async function requireEditableApplication() {
@@ -522,6 +507,21 @@ export async function submitApplicationAction(values: unknown): Promise<ActionRe
     actorId: user.id,
     metadata: { registrationId, departmentId: participation.departmentId, edition: participation.edition },
   })
+
+  /*
+   * Submission by a migrated account is the profile review the invitation
+   * email promises: every prefilled step has now demonstrably been walked.
+   * Best-effort — a reporting write must never fail a submission.
+   */
+  const migratedState = await db.user.findUnique({
+    where: { id: user.id },
+    select: { isPreviousEditionUser: true, profileReviewedAt: true },
+  })
+  if (migratedState?.isPreviousEditionUser && !migratedState.profileReviewedAt) {
+    await recordProfileReviewed(user.id).catch((error) =>
+      console.error('[migration] could not record profile review', error),
+    )
+  }
 
   // Confirmation email — deliberately excludes health and emergency details.
   const message = submissionEmail({

@@ -68,6 +68,8 @@ export function ApplicationFilters({
       churchRegionId: searchParams.get('churchRegionId') ?? 'all',
       churchProvinceId: searchParams.get('churchProvinceId') ?? 'all',
       ageRange: searchParams.get('ageRange') ?? 'all',
+      confirmed: searchParams.get('confirmed') ?? 'all',
+      participation: searchParams.get('participation') ?? 'all',
     }),
     [searchParams],
   )
@@ -125,11 +127,40 @@ export function ApplicationFilters({
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Filter label="Status" id="filter-status" value={current.status} onChange={(v) => apply({ status: v })}>
           <option value="all">All statuses</option>
+          {/* The dashboard's combined queue, selectable here so its link round-trips. */}
+          <option value="SUBMITTED,UNDER_REVIEW">Awaiting review (both)</option>
+          <option value="DRAFT">In progress (draft)</option>
           {STATUSES.map((status) => (
             <option key={status} value={status}>
               {STATUS_LABELS[status]}
             </option>
           ))}
+        </Filter>
+
+        <Filter
+          label="This edition"
+          id="filter-confirmed"
+          value={
+            current.participation !== 'all'
+              ? `p:${current.participation}`
+              : current.confirmed !== 'all'
+                ? `c:${current.confirmed}`
+                : 'all'
+          }
+          onChange={(v) => {
+            if (v === 'all') apply({ confirmed: 'all', participation: 'all' })
+            else if (v.startsWith('c:')) apply({ confirmed: v.slice(2), participation: 'all' })
+            else apply({ participation: v.slice(2), confirmed: v.slice(2) === 'WITHDRAWN' ? 'all' : '1' })
+          }}
+        >
+          <option value="all">Any participation</option>
+          <option value="c:1">Confirmed</option>
+          <option value="c:0">Not confirmed</option>
+          <option value="p:SIGNED_UP">Confirmed · signed up</option>
+          <option value="p:ASSIGNED">Confirmed · assigned to shifts</option>
+          <option value="p:CHECKED_IN">Confirmed · checked in</option>
+          <option value="p:COMPLETED">Confirmed · completed</option>
+          <option value="p:WITHDRAWN">Withdrawn</option>
         </Filter>
 
         <Filter

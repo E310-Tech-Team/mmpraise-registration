@@ -132,6 +132,34 @@ const DESCRIPTORS: Partial<Record<AuditAction, Descriptor>> = {
   'migration.invitations_sent': { label: 'emailed migration invitations', category: 'migration', security: true },
   'migration.exported': { label: 'exported migration data', category: 'migration', security: true },
   'migration.upload_purged': { label: 'purged a migration upload', category: 'migration' },
+  'migration.contact_logged': {
+    label: 'logged contact with a previous participant',
+    category: 'migration',
+    security: true,
+  },
+  'migration.contacts_bulk_logged': {
+    label: 'logged contact with several previous participants',
+    category: 'migration',
+    security: true,
+  },
+  'migration.reminder_run_created': {
+    label: 'started a reminder email run',
+    category: 'migration',
+    security: true,
+  },
+  'migration.reminder_run_cancelled': {
+    label: 'cancelled a reminder email run',
+    category: 'migration',
+  },
+  'migration.outreach_completed': {
+    label: 'finished an outreach email run',
+    category: 'migration',
+    security: true,
+  },
+  'migration.profile_reviewed': {
+    label: 'reviewed their migrated profile',
+    category: 'migration',
+  },
 }
 
 export function describeAction(action: string): Descriptor {

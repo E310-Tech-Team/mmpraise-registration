@@ -1,27 +1,27 @@
 import 'server-only'
 import { db } from '@/lib/db'
-import { audit } from '@/lib/audit'
-import { env } from '@/lib/env'
-import { sendMailSafely } from '@/lib/mail/mailer'
-import { migrationInvitationEmail } from '@/lib/mail/templates'
+import { createInvitationRun } from '@/lib/outreach/service'
 import { hasError } from './validate'
 import { importRow } from './import'
 
 /**
- * The queue worker.
+ * The import queue worker.
  *
  * Jobs are claimed with `FOR UPDATE SKIP LOCKED`, so several workers can run
  * concurrently without ever handing the same chunk to two of them. Each job
  * covers a bounded slice of rows, which keeps a single failure from losing the
  * whole import and makes progress observable while it runs.
  *
+ * Invitation *sending* no longer lives here: it moved to the outreach worker
+ * (src/lib/outreach/worker.ts), where every send is a per-recipient attempt
+ * on a run. The old `kind: 'invite'` jobs are retired — their offsets never
+ * matched what a pass actually sent, which stranded half a batch's queue, and
+ * re-queues collided with the old job keys and silently created nothing.
+ *
  * Nothing here runs inside a browser request: an import of several thousand
  * rows would exceed any sensible request timeout, and a half-finished HTTP
  * request is the one situation where idempotency is hardest to reason about.
  */
-
-/** How many invitations may be sent per worker pass, to spare the mail relay. */
-const INVITE_RATE_PER_PASS = 50
 
 type ClaimedJob = {
   id: string
@@ -91,8 +91,8 @@ export async function runQueue({ maxJobs = 20 }: { maxJobs?: number } = {}): Pro
     if (!job) break
 
     try {
+      // 'invite' jobs are retired (cancelled by migration); a straggler is a no-op.
       if (job.kind === 'import') await runImportChunk(job)
-      else if (job.kind === 'invite') await runInviteChunk(job)
       await finishJob(job)
     } catch (error) {
       console.error('[migration] job failed', job.id, error)
@@ -194,9 +194,14 @@ async function runImportChunk(job: ClaimedJob) {
               message: `Existing value "${c.existing}" kept; imported value "${c.incoming}" not applied.`,
             })),
           ] as never,
-          // Only queue an invitation for someone who cannot already sign in.
-          invitationStatus:
-            batch.sendInvitations && outcome.action === 'CREATE' ? 'QUEUED' : 'NOT_QUEUED',
+          /*
+           * Never QUEUED here. The old code marked rows QUEUED at import when
+           * the batch asked for invitations — without creating the jobs to
+           * send them, which deadlocked the whole batch. The upload-time
+           * choice is honoured once, in refreshBatchStatus, the moment the
+           * import completes, through the same path as the Invite button.
+           */
+          invitationStatus: 'NOT_QUEUED',
         },
       })
     } catch (error) {
@@ -215,73 +220,6 @@ async function runImportChunk(job: ClaimedJob) {
       })
     }
   }
-}
-
-/**
- * Send a slice of pending invitations.
- *
- * `invitationSentKey` is unique, so claiming a record before sending means a
- * retried job can never send a second message to the same person — the second
- * claim violates the constraint and the row is skipped.
- */
-async function runInviteChunk(job: ClaimedJob) {
-  const batch = await db.migrationBatch.findUnique({ where: { id: job.batchId } })
-  if (!batch || batch.status === 'CANCELLED') return
-
-  const records = await db.migratedUserRecord.findMany({
-    where: {
-      batchId: job.batchId,
-      invitationStatus: 'QUEUED',
-      excludedFromInvites: false,
-      // Someone who has already set a password does not need inviting.
-      activatedAt: null,
-    },
-    take: Math.min(job.size, INVITE_RATE_PER_PASS),
-    orderBy: { rowNumber: 'asc' },
-  })
-
-  for (const record of records) {
-    const sendKey = `${record.batchId}:${record.rowNumber}`
-
-    // Claim before sending. `updateMany` reports how many rows it changed, so
-    // a count of zero means another pass already claimed this record — and we
-    // must not send a second invitation to the same person.
-    const claimed = await db.migratedUserRecord.updateMany({
-      where: { id: record.id, invitationSentKey: null },
-      data: { invitationSentKey: sendKey },
-    })
-    if (claimed.count === 0) continue
-
-    const message = migrationInvitationEmail({
-      name: record.firstName ?? 'there',
-      edition: batch.sourceEdition,
-      loginUrl: `${env.APP_URL}/login`,
-      resetUrl: `${env.APP_URL}/forgot-password`,
-      supportEmail: env.SUPPORT_EMAIL,
-    })
-
-    const delivered = await sendMailSafely({ ...message, to: record.normalisedEmail })
-
-    await db.migratedUserRecord.update({
-      where: { id: record.id },
-      data: {
-        // SENT, not DELIVERED: SMTP acceptance is not proof of delivery, and
-        // only a provider webhook can tell us the difference.
-        invitationStatus: delivered ? 'SENT' : 'FAILED',
-        invitedAt: delivered ? new Date() : null,
-        invitationError: delivered ? null : 'Mail provider did not accept the message.',
-        // Released on failure so a retry is possible.
-        invitationSentKey: delivered ? sendKey : null,
-      },
-    })
-  }
-
-  await audit({
-    action: 'migration.invitations_sent',
-    entityType: 'MigrationBatch',
-    entityId: batch.id,
-    metadata: { invitationsAttempted: records.length },
-  })
 }
 
 /** Recompute a batch's counters and status from its rows. */
@@ -307,7 +245,10 @@ export async function refreshBatchStatus(batchId: string) {
     .reduce((sum, c) => sum + c._count._all, 0)
 
   const failed = total('FAILED')
-  const batch = await db.migrationBatch.findUnique({ where: { id: batchId }, select: { status: true } })
+  const batch = await db.migrationBatch.findUnique({
+    where: { id: batchId },
+    select: { status: true, sendInvitations: true, invitationsAutoQueuedAt: true, createdById: true },
+  })
   if (!batch || batch.status === 'CANCELLED') return
 
   const done = pendingJobs === 0
@@ -328,4 +269,23 @@ export async function refreshBatchStatus(batchId: string) {
       completedAt: done ? new Date() : null,
     },
   })
+
+  /*
+   * Honour the upload-time "send invitations" choice, exactly once, the moment
+   * the import completes — through the same path as the Invite button, so the
+   * jobs actually exist. The atomic null-guard means concurrent workers
+   * finishing the last two chunks cannot both fire it.
+   */
+  if (done && batch.sendInvitations && !batch.invitationsAutoQueuedAt) {
+    const guard = await db.migrationBatch.updateMany({
+      where: { id: batchId, invitationsAutoQueuedAt: null },
+      data: { invitationsAutoQueuedAt: new Date() },
+    })
+    if (guard.count === 1) {
+      const queued = await createInvitationRun({ batchId, actorId: batch.createdById })
+      if (!queued.ok) {
+        console.info(`[migration] auto-queue for batch ${batchId}: ${queued.error}`)
+      }
+    }
+  }
 }

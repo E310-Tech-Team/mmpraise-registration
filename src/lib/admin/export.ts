@@ -47,6 +47,11 @@ export function filtersFromParams(url: URL): ApplicationFilters {
     churchRegionId: url.searchParams.get('churchRegionId') ?? undefined,
     churchProvinceId: url.searchParams.get('churchProvinceId') ?? undefined,
     ageRange: url.searchParams.get('ageRange') ?? undefined,
+    confirmed: url.searchParams.get('confirmed') ?? undefined,
+    participation: url.searchParams.get('participation') ?? undefined,
+    submittedFrom: url.searchParams.get('submittedFrom') ?? undefined,
+    submittedTo: url.searchParams.get('submittedTo') ?? undefined,
+    imported: url.searchParams.get('imported') ?? undefined,
   }
 }
 

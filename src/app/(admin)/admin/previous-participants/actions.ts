@@ -18,6 +18,7 @@ import {
   validateBatch,
 } from '@/lib/migration/service'
 import { runQueue } from '@/lib/migration/worker'
+import { runOutreachQueue } from '@/lib/outreach/worker'
 import { db } from '@/lib/db'
 
 /**
@@ -180,7 +181,8 @@ export async function queueInvitationsAction(
   const result = await queueInvitations({ batchId, actorId: user.id })
   if (!result.ok) return fail(result.error)
 
-  await runQueue({ maxJobs: 3 }).catch((error) => {
+  // Invitations are outreach jobs now; start the first slices immediately.
+  await runOutreachQueue({ maxJobs: 3 }).catch((error) => {
     console.error('[migration] inline invite pass failed', error)
   })
 
@@ -198,9 +200,13 @@ export async function queueInvitationsAction(
 export async function runQueueAction(batchId: string): Promise<ActionResult<{ processed: number }>> {
   await requirePermission('migration:execute')
 
+  // Both queues: import chunks, and any outreach run (invitations, reminders)
+  // waiting to send — so "Process now" and the batch screen's poll advance
+  // everything that can move.
   const result = await runQueue({ maxJobs: 5 })
+  const outreach = await runOutreachQueue({ maxJobs: 3 })
   revalidatePath(`/admin/previous-participants/${batchId}`)
-  return ok(result)
+  return ok({ processed: result.processed + outreach.processed })
 }
 
 export async function cancelBatchAction(batchId: string): Promise<ActionResult<undefined>> {
@@ -254,8 +260,15 @@ export async function setInviteExclusionAction(
   await db.migratedUserRecord.update({
     where: { id: recordId },
     data: {
+      /*
+       * The flag alone. Exclusion used to also write invitationStatus
+       * SUPPRESSED — the same value activation wrote — so reports could not
+       * tell "we chose not to email them" from "they responded". The outreach
+       * eligibility predicates filter on this flag directly.
+       */
       excludedFromInvites: excluded,
-      invitationStatus: excluded ? 'SUPPRESSED' : 'NOT_QUEUED',
+      // A never-sent row drops out of the send queue immediately.
+      ...(excluded ? { invitationStatus: 'NOT_QUEUED' as const } : {}),
     },
   })
 

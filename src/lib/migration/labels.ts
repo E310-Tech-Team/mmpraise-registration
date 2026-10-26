@@ -94,7 +94,14 @@ export const INVITATION_LABELS: Record<InvitationStatus, string> = {
   DELIVERED: 'Delivered',
   BOUNCED: 'Bounced',
   FAILED: 'Failed',
-  SUPPRESSED: 'Excluded',
+  /*
+   * Legacy value: nothing writes SUPPRESSED any more. It used to mean either
+   * "an administrator excluded them" or "they activated" — two opposite facts
+   * under one word, and the UI picked the wrong one. Exclusion now shows from
+   * `excludedFromInvites` and activation from `activatedAt`; any row still
+   * carrying this value predates the repair migration.
+   */
+  SUPPRESSED: 'Suppressed (legacy)',
 }
 
 export const INVITATION_TONES: Record<InvitationStatus, Tone> = {

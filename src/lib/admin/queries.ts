@@ -1,9 +1,10 @@
 import 'server-only'
 import { eventConfig } from '@/config/site'
 import { db } from '@/lib/db'
-import type { ApplicationStatus, Prisma } from '@/generated/prisma/client'
+import type { ApplicationStatus, ParticipationStatus, Prisma } from '@/generated/prisma/client'
 import { departmentScope } from '@/lib/auth/rbac'
 import type { SessionUser } from '@/lib/auth/session'
+import { confirmedParticipationWhere, lagosDayEnd, lagosDayStart } from '@/lib/admin/metrics'
 
 /**
  * Administrative queries over volunteer applications.
@@ -17,6 +18,7 @@ import type { SessionUser } from '@/lib/auth/session'
  */
 export type ApplicationFilters = {
   q?: string
+  /** One status, or several comma-separated — validated against the enum. */
   status?: string
   departmentId?: string
   countryId?: string
@@ -24,6 +26,15 @@ export type ApplicationFilters = {
   churchRegionId?: string
   churchProvinceId?: string
   ageRange?: string
+  /** '1' = confirmed for the current edition, '0' = not confirmed. */
+  confirmed?: string
+  /** A ParticipationStatus for the current edition's participation. */
+  participation?: string
+  /** Lagos calendar dates (yyyy-mm-dd) bounding submittedAt, inclusive. */
+  submittedFrom?: string
+  submittedTo?: string
+  /** '1' = only accounts the previous-edition import created. */
+  imported?: string
   page?: number
   perPage?: number
   sort?: 'newest' | 'oldest' | 'name'
@@ -31,11 +42,52 @@ export type ApplicationFilters = {
 
 export const PER_PAGE_DEFAULT = 25
 
+const APPLICATION_STATUSES: readonly string[] = [
+  'DRAFT',
+  'SUBMITTED',
+  'UNDER_REVIEW',
+  'APPROVED',
+  'WAITLISTED',
+  'REJECTED',
+  'ASSIGNED',
+  'CHECKED_IN',
+  'COMPLETED',
+]
+
+const PARTICIPATION_STATUSES: readonly string[] = [
+  'SIGNED_UP',
+  'ASSIGNED',
+  'CHECKED_IN',
+  'COMPLETED',
+  'WITHDRAWN',
+]
+
+/**
+ * Parse `?status=` into real enum values, dropping anything else.
+ *
+ * The URL is user input: the old code cast it straight into the query, so
+ * `?status=GARBAGE` reached Prisma and crashed the page. Unknown values are
+ * ignored rather than erroring — a stale bookmark should degrade to a wider
+ * list, not a broken one.
+ */
+export function parseStatusFilter(value: string | undefined): ApplicationStatus[] {
+  if (!value || value === 'all') return []
+  return value
+    .split(',')
+    .map((part) => part.trim().toUpperCase())
+    .filter((part): part is ApplicationStatus => APPLICATION_STATUSES.includes(part))
+}
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
 export function buildWhere(user: SessionUser, filters: ApplicationFilters): Prisma.VolunteerApplicationWhereInput {
   const scope = departmentScope(user)
+  const edition = eventConfig.edition
 
   const where: Prisma.VolunteerApplicationWhereInput = {
-    // Drafts are the volunteer's private workspace and never appear in review lists.
+    // Drafts are the volunteer's private workspace and never appear in review
+    // lists — unless explicitly asked for by status (the dashboard's
+    // "In progress" tile needs exactly that view).
     status: { not: 'DRAFT' },
   }
 
@@ -47,7 +99,7 @@ export function buildWhere(user: SessionUser, filters: ApplicationFilters): Pris
    * *when*. Every department condition below therefore reaches through the
    * current edition's participation.
    */
-  const participation: Prisma.EditionParticipationWhereInput = { edition: eventConfig.edition }
+  const participation: Prisma.EditionParticipationWhereInput = { edition }
   let scopedByDepartment = false
 
   if (scope !== null) {
@@ -56,19 +108,71 @@ export function buildWhere(user: SessionUser, filters: ApplicationFilters): Pris
     scopedByDepartment = true
   }
 
-  if (filters.status && filters.status !== 'all') {
-    where.status = filters.status as ApplicationStatus
-  }
+  const statuses = parseStatusFilter(filters.status)
+  if (statuses.length === 1) where.status = statuses[0]
+  else if (statuses.length > 1) where.status = { in: statuses }
 
   if (filters.departmentId && filters.departmentId !== 'all') {
-    // Intersect with the scope rather than replacing it.
-    participation.departmentId =
-      scope === null || scope.includes(filters.departmentId) ? filters.departmentId : '__none__'
+    if (filters.departmentId === 'none') {
+      // The "No department yet" bucket: a current-edition participation exists
+      // but no department has been chosen. Scoped admins never see it — their
+      // scope is a department list, and "none" is not on it.
+      participation.departmentId = scope === null ? null : '__none__'
+    } else {
+      // Intersect with the scope rather than replacing it.
+      participation.departmentId =
+        scope === null || scope.includes(filters.departmentId) ? filters.departmentId : '__none__'
+    }
     scopedByDepartment = true
   }
 
   if (scopedByDepartment) {
     where.participations = { some: participation }
+  }
+
+  // Confirmation and participation-status filters, from the same definition
+  // the dashboard counts with (src/lib/admin/metrics.ts).
+  const confirmedWhere = confirmedParticipationWhere(edition)
+  if (filters.confirmed === '1') {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      { participations: { some: confirmedWhere } },
+      { status: { not: 'REJECTED' } },
+    ]
+  } else if (filters.confirmed === '0') {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      { participations: { none: { edition, confirmedAt: { not: null } } } },
+    ]
+  }
+
+  if (filters.participation && PARTICIPATION_STATUSES.includes(filters.participation)) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      {
+        participations: {
+          some: { edition, status: filters.participation as ParticipationStatus },
+        },
+      },
+    ]
+  }
+
+  if (filters.submittedFrom && DATE_ONLY.test(filters.submittedFrom)) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      { submittedAt: { gte: lagosDayStart(filters.submittedFrom) } },
+    ]
+  }
+  if (filters.submittedTo && DATE_ONLY.test(filters.submittedTo)) {
+    where.AND = [
+      ...(Array.isArray(where.AND) ? where.AND : []),
+      { submittedAt: { lte: lagosDayEnd(filters.submittedTo) } },
+    ]
+  }
+
+  const userFilter: Prisma.UserWhereInput = {}
+  if (filters.imported === '1') {
+    userFilter.isPreviousEditionUser = true
   }
 
   const profileFilter: Prisma.VolunteerProfileWhereInput = {}
@@ -83,7 +187,10 @@ export function buildWhere(user: SessionUser, filters: ApplicationFilters): Pris
   }
 
   if (Object.keys(profileFilter).length > 0) {
-    where.user = { profile: profileFilter }
+    userFilter.profile = profileFilter
+  }
+  if (Object.keys(userFilter).length > 0) {
+    where.user = userFilter
   }
 
   const q = filters.q?.trim()
@@ -251,60 +358,4 @@ export async function getApplicationForReview(user: SessionUser, id: string) {
   }
 
   return application
-}
-
-/** Aggregate counts for the admin overview. */
-export async function getAnalytics(user: SessionUser) {
-  const where = buildWhere(user, {})
-
-  const [byStatus, byDepartment, byCountry, byAgeRange, total, recent] = await Promise.all([
-    db.volunteerApplication.groupBy({ by: ['status'], where, _count: { _all: true } }),
-    /*
-     * Department distribution comes from participations in the current edition.
-     * Grouping applications by department is no longer possible — and no longer
-     * meaningful, since a volunteer's department is a per-edition choice.
-     */
-    db.editionParticipation.groupBy({
-      by: ['departmentId'],
-      where: { edition: eventConfig.edition, application: where },
-      _count: { _all: true },
-    }),
-    db.volunteerProfile.groupBy({
-      by: ['countryId'],
-      where: { user: { applications: { some: where } } },
-      _count: { _all: true },
-      orderBy: { _count: { countryId: 'desc' } },
-      take: 8,
-    }),
-    db.volunteerProfile.groupBy({
-      by: ['ageRange'],
-      where: { user: { applications: { some: where } } },
-      _count: { _all: true },
-    }),
-    db.volunteerApplication.count({ where }),
-    db.volunteerApplication.count({
-      where: { ...where, submittedAt: { gte: new Date(Date.now() - 7 * 24 * 3600_000) } },
-    }),
-  ])
-
-  const departments = await db.department.findMany({ select: { id: true, name: true } })
-  const countries = await db.country.findMany({
-    where: { id: { in: byCountry.map((c) => c.countryId).filter((id): id is string => Boolean(id)) } },
-    select: { id: true, name: true },
-  })
-
-  return {
-    total,
-    recent,
-    byStatus: byStatus.map((row) => ({ status: row.status, count: row._count._all })),
-    byDepartment: byDepartment.map((row) => ({
-      department: departments.find((d) => d.id === row.departmentId) ?? null,
-      count: row._count._all,
-    })),
-    byCountry: byCountry.map((row) => ({
-      country: countries.find((c) => c.id === row.countryId)?.name ?? 'Unknown',
-      count: row._count._all,
-    })),
-    byAgeRange: byAgeRange.map((row) => ({ ageRange: row.ageRange, count: row._count._all })),
-  }
 }

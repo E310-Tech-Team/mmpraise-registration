@@ -42,14 +42,16 @@ test.describe('admin overview', () => {
      * numbers, and conflating them again on the dashboard would undo the model.
      */
     await expect(page.getByRole('heading', { name: /^registrations$/i })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /\d{4} participation/i })).toBeVisible()
-    await expect(page.getByText(/not yet confirmed/i).first()).toBeVisible()
+    await expect(page.getByRole('heading', { name: /this edition \(\d{4}\)/i })).toBeVisible()
+    await expect(page.getByText(/registered, not confirmed/i).first()).toBeVisible()
   })
 
   test('every actionable metric is a link to the view that resolves it', async ({ page }) => {
+    // "Awaiting review" counts SUBMITTED and UNDER_REVIEW, so its link must
+    // carry both — it used to open SUBMITTED only and undercount on arrival.
     await expect(
       page.getByRole('link', { name: /awaiting review/i }).first(),
-    ).toHaveAttribute('href', /\/admin\/applications\?status=SUBMITTED/)
+    ).toHaveAttribute('href', /\/admin\/applications\?status=SUBMITTED,UNDER_REVIEW/)
 
     const hrefs = await page
       .locator('main a[href]')
@@ -106,13 +108,78 @@ test.describe('admin overview', () => {
     await expect(page.getByText(`${claimed} application`)).toBeVisible({ timeout: 30_000 })
   })
 
-  test('a segment with nobody in it is not offered as a link', async ({ page }) => {
-    // "No department yet" and an unknown country cannot be expressed as a
-    // filter, so they stay plain text rather than linking to nothing.
-    const deadEnds = page.getByText(/no department yet|^unknown$/i)
+  test('a segment that cannot be filtered on is not offered as a link', async ({ page }) => {
+    // An unknown country cannot be expressed as a filter, so it stays plain
+    // text. ("No department yet" *can* now — `departmentId=none` — so it links.)
+    const deadEnds = page.getByText(/^unknown$/i)
     for (const text of await deadEnds.all()) {
       await expect(text.locator('xpath=ancestor::a')).toHaveCount(0)
     }
+  })
+
+  /*
+   * The contract of the whole dashboard, asserted figure by figure: a tile
+   * saying N opens a list saying N, under the same permissions. Each tile's
+   * predicate and its destination's predicate come from the same module, so a
+   * failure here means they have drifted apart — the bug class this rework
+   * exists to end.
+   */
+  test('every figure opens a list with the same count', async ({ page }) => {
+    test.setTimeout(180_000)
+
+    const tiles = await page.locator('main a[href]').evaluateAll((links) =>
+      links
+        .map((link) => {
+          const value = link.querySelector('span.text-2xl')?.textContent?.trim()
+          return { href: link.getAttribute('href') ?? '', value: value ? Number(value) : NaN }
+        })
+        .filter(
+          (tile) =>
+            !Number.isNaN(tile.value) &&
+            (tile.href.startsWith('/admin/applications') ||
+              tile.href.startsWith('/admin/previous-participants/people')),
+        ),
+    )
+    expect(tiles.length).toBeGreaterThan(8)
+
+    for (const tile of tiles) {
+      await page.goto(tile.href)
+      // The applications header prints the raw number; the people header
+      // uses thousands separators. Each pattern matches its own page's form.
+      const pattern = tile.href.startsWith('/admin/applications')
+        ? new RegExp(`^${tile.value} applications? match`)
+        : new RegExp(`^${tile.value.toLocaleString('en-US')} (people|person) match`)
+      await expect(
+        page.getByText(pattern),
+        `${tile.href} should open ${tile.value}`,
+      ).toBeVisible({ timeout: 30_000 })
+    }
+  })
+
+  test('percentages name their denominator', async ({ page }) => {
+    // Never a bare "62%": every percentage on a tile says what it is a share of.
+    const percents = await page
+      .locator('main li span.text-xs')
+      .evaluateAll((nodes) =>
+        nodes.map((n) => n.textContent?.trim() ?? '').filter((t) => /(\d+%|N\/A)/.test(t)),
+      )
+    expect(percents.length).toBeGreaterThan(0)
+    for (const text of percents) {
+      expect(text).toMatch(/(\d+%|N\/A) (of |response rate)/)
+    }
+  })
+
+  test('says when the figures were computed, and refreshes on request', async ({ page }) => {
+    await expect(page.getByText(/updated \d{2} \w{3} \d{4}, \d{2}:\d{2} WAT/i)).toBeVisible()
+    await page.getByRole('button', { name: /refresh/i }).click()
+    await expect(page.getByRole('heading', { level: 1, name: /overview/i })).toBeVisible()
+  })
+
+  test('every chart has a keyboard-reachable table of linked records', async ({ page }) => {
+    const tables = page.locator('main details summary', { hasText: /view as table/i })
+    expect(await tables.count()).toBeGreaterThanOrEqual(2)
+    await tables.first().click()
+    await expect(page.locator('main details[open] table a').first()).toBeVisible()
   })
 
   test('has no detectable accessibility violations', async ({ page }) => {

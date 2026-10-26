@@ -1,123 +1,196 @@
 import 'server-only'
 import { eventConfig } from '@/config/site'
 import { db } from '@/lib/db'
-import { can } from '@/lib/auth/rbac'
+import { can, departmentScope } from '@/lib/auth/rbac'
 import type { SessionUser } from '@/lib/auth/session'
 import { getSettings } from '@/lib/settings'
+import type { Prisma } from '@/generated/prisma/client'
+import {
+  AWAITING_REVIEW_STATUSES,
+  confirmedParticipationWhere,
+  LEGACY_APPLICATION_STATUSES,
+  newMessagesWhere,
+  pendingTestimoniesWhere,
+  registeredUnconfirmedWhere,
+  REGISTERED_STATUSES,
+  submissionTrend,
+} from '@/lib/admin/metrics'
+import { participantSummary, stageCounts } from '@/lib/admin/participants'
 
 /**
- * Everything the admin overview shows, gathered in one place.
+ * Everything the admin overview shows, in one shape.
  *
- * The page's job is operational: *what needs doing, and how big is it?* So the
- * shape here is organised by question, not by table — and every count that an
- * administrator can act on carries the href of the filtered view that resolves
- * it, because a number nobody can click is decoration.
+ * Two rules hold for every figure here, and the e2e suite asserts them:
  *
- * Sections are permission-gated at this layer, not in the JSX: a department
- * head's overview simply contains no migration block, rather than an empty one
- * the template has to hide.
+ *  1. **Same predicate as the destination.** Each count's where-clause comes
+ *     from src/lib/admin/metrics.ts or src/lib/admin/participants.ts — the
+ *     same modules the list pages and exports use — so a card saying 771
+ *     opens a list saying 771.
+ *  2. **Same scope as the viewer.** A department head's numbers are their
+ *     departments' numbers; the old overview showed platform-wide totals that
+ *     shrank mysteriously on click-through.
  */
 
+export type AttentionTone = 'danger' | 'warning' | 'info'
 export type AttentionItem = {
   id: string
   label: string
   count: number
   href: string
-  /** How urgent the queue is when non-empty. */
-  tone: 'warning' | 'danger' | 'info'
+  tone: AttentionTone
 }
 
 export type OverviewData = Awaited<ReturnType<typeof getOverview>>
 
 export async function getOverview(user: SessionUser) {
   const edition = eventConfig.edition
+  const scope = departmentScope(user)
   const settings = await getSettings()
 
   /*
-   * The split model reports two lifecycles, and conflating them again here
-   * would undo the point of the split:
-   *
-   *  - the **application** lifecycle — one-time standing (submitted → approved)
-   *  - the **participation** lifecycle — this edition (signed up → completed)
+   * The viewer's slice of the application table, mirroring buildWhere: scope
+   * reaches department through this edition's participation, and an empty
+   * scope matches nothing.
    */
-  const [applicationsByStatus, participationsByStatus, unconfirmed, submittedThisWeek] =
-    await Promise.all([
-      db.volunteerApplication.groupBy({ by: ['status'], _count: { _all: true } }),
-      db.editionParticipation.groupBy({
-        by: ['status'],
-        where: { edition, confirmedAt: { not: null } },
-        _count: { _all: true },
-      }),
-      // Registered volunteers who have not yet said "I am coming this edition"
-      // — the number the whole activation campaign exists to drive down.
-      db.volunteerApplication.count({
-        where: {
-          status: { in: ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'WAITLISTED'] },
-          participations: { none: { edition, confirmedAt: { not: null } } },
-        },
-      }),
-      db.volunteerApplication.count({
-        where: { submittedAt: { gte: new Date(Date.now() - 7 * 86_400_000) } },
-      }),
-    ])
+  const scopeWhere: Prisma.VolunteerApplicationWhereInput =
+    scope === null
+      ? {}
+      : {
+          participations: {
+            some: { edition, departmentId: scope.length > 0 ? { in: scope } : '__none__' },
+          },
+        }
+  const scoped = (
+    where: Prisma.VolunteerApplicationWhereInput,
+  ): Prisma.VolunteerApplicationWhereInput => ({ AND: [scopeWhere, where] })
+
+  const participationScope: Prisma.EditionParticipationWhereInput =
+    scope === null ? {} : { departmentId: scope.length > 0 ? { in: scope } : '__none__' }
+
+  // ------------------------------------------------------------ registrations
+  const [applicationsByStatus, unconfirmed, submittedLast7Days] = await Promise.all([
+    db.volunteerApplication.groupBy({
+      by: ['status'],
+      where: scopeWhere,
+      _count: { _all: true },
+    }),
+    // Registered volunteers who have not yet said "I am coming this edition"
+    // — the number the whole activation campaign exists to drive down.
+    db.volunteerApplication.count({ where: scoped(registeredUnconfirmedWhere(edition)) }),
+    db.volunteerApplication.count({
+      where: scoped({ submittedAt: { gte: new Date(Date.now() - 7 * 86_400_000) } }),
+    }),
+  ])
 
   const appCount = (status: string) =>
     applicationsByStatus.find((row) => row.status === status)?._count._all ?? 0
+  const registered = REGISTERED_STATUSES.reduce((sum, status) => sum + appCount(status), 0)
+  const legacyStatuses = LEGACY_APPLICATION_STATUSES.reduce(
+    (sum, status) => sum + appCount(status),
+    0,
+  )
+  const awaitingReview = AWAITING_REVIEW_STATUSES.reduce(
+    (sum, status) => sum + appCount(status),
+    0,
+  )
+
+  // ------------------------------------------------------------ participation
+  const confirmedWhere: Prisma.EditionParticipationWhereInput = {
+    AND: [confirmedParticipationWhere(edition), participationScope],
+  }
+  const [participationsByStatus, withdrawn] = await Promise.all([
+    db.editionParticipation.groupBy({
+      by: ['status'],
+      where: confirmedWhere,
+      _count: { _all: true },
+    }),
+    db.editionParticipation.count({
+      where: { AND: [{ edition, status: 'WITHDRAWN' }, participationScope] },
+    }),
+  ])
   const partCount = (status: string) =>
     participationsByStatus.find((row) => row.status === status)?._count._all ?? 0
-
-  const awaitingReview = appCount('SUBMITTED') + appCount('UNDER_REVIEW')
+  const confirmed = participationsByStatus.reduce((sum, row) => sum + row._count._all, 0)
 
   // ------------------------------------------------------------- migration
   const showMigration = can(user, 'migration:view')
   const migration = showMigration
     ? await (async () => {
-        const [imported, activated, reviewed, invites, failedRows, runningBatches] =
+        const [people, stages, failedRows, invalidRows, failedInvitationRows, runningBatches, sendsInFlight] =
           await Promise.all([
-            db.user.count({ where: { isPreviousEditionUser: true } }),
-            db.user.count({
-              where: { isPreviousEditionUser: true, emailVerifiedAt: { not: null } },
-            }),
-            db.user.count({
-              where: { isPreviousEditionUser: true, profileReviewedAt: { not: null } },
-            }),
-            db.migratedUserRecord.groupBy({ by: ['invitationStatus'], _count: { _all: true } }),
+            participantSummary(edition),
+            stageCounts(edition),
             db.migratedUserRecord.count({ where: { status: 'FAILED' } }),
+            db.migratedUserRecord.count({ where: { status: 'INVALID' } }),
+            db.migratedUserRecord.count({ where: { invitationStatus: 'FAILED' } }),
             db.migrationBatch.count({ where: { status: { in: ['QUEUED', 'IMPORTING'] } } }),
+            db.outreachAttempt.count({ where: { status: { in: ['QUEUED', 'SENDING'] } } }),
           ])
-        const invite = (status: string) =>
-          invites.find((row) => row.invitationStatus === status)?._count._all ?? 0
-        return {
-          imported,
-          activated,
-          reviewed,
-          invitesSent: invite('SENT') + invite('DELIVERED'),
-          invitesFailed: invite('FAILED') + invite('BOUNCED'),
-          failedRows,
-          runningBatches,
-        }
+        return { people, stages, failedRows, invalidRows, failedInvitationRows, runningBatches, sendsInFlight }
+      })()
+    : null
+
+  // ------------------------------------------------------------ follow-ups
+  const showFollowUps = can(user, 'migration:followup')
+  const followUpsDue = showFollowUps
+    ? await (async () => {
+        /*
+         * Due = the latest contact for a person sets a follow-up date that has
+         * arrived, the staff outcome still wants chasing, and no qualifying
+         * response has happened since — the person has not confirmed this
+         * edition and has not activated after that contact. Derived, never
+         * written: a response clears the queue without anyone editing the log.
+         */
+        const rows = await db.$queryRaw<{ due: bigint; overdue: bigint }[]>`
+          SELECT
+            count(*) FILTER (WHERE l."nextFollowUpAt" <= now()) AS due,
+            count(*) FILTER (WHERE l."nextFollowUpAt" < now() - interval '1 day') AS overdue
+          FROM users u
+          JOIN LATERAL (
+            SELECT * FROM participant_contact_logs pl
+            WHERE pl."userId" = u."id"
+            ORDER BY pl."contactedAt" DESC
+            LIMIT 1
+          ) l ON true
+          WHERE l."nextFollowUpAt" IS NOT NULL
+            AND l."outcome" IN ('AWAITING_RESPONSE', 'NEEDS_ASSISTANCE', 'UNREACHABLE')
+            AND NOT EXISTS (
+              SELECT 1 FROM edition_participations ep
+              JOIN volunteer_applications va ON va."id" = ep."applicationId"
+              WHERE va."userId" = u."id" AND ep."edition" = ${edition} AND ep."confirmedAt" IS NOT NULL
+            )
+            AND NOT (u."emailVerifiedAt" IS NOT NULL AND u."emailVerifiedAt" > l."contactedAt")
+        `
+        return { due: Number(rows[0]?.due ?? 0), overdue: Number(rows[0]?.overdue ?? 0) }
       })()
     : null
 
   // ---------------------------------------------------------- communications
-  const showComms = can(user, 'application:view_all')
-  const comms = showComms
-    ? await (async () => {
-        const [newMessages, pendingTestimonies, failedEmails] = await Promise.all([
-          db.contactMessage.count({ where: { status: 'NEW' } }),
-          db.testimonySubmission.count({ where: { status: 'PENDING' } }),
-          db.migratedUserRecord.count({ where: { invitationStatus: { in: ['FAILED', 'BOUNCED'] } } }),
-        ])
-        return { newMessages, pendingTestimonies, failedEmails }
-      })()
-    : null
+  /*
+   * Gated by the destination's own permission, and counting what the inbox
+   * actually shows by default (no test data, no spam) — a figure somebody
+   * cannot click through to, or that melts on arrival, trains people to
+   * distrust the whole dashboard.
+   */
+  const showMessages = can(user, 'contact:manage')
+  const showTestimonies = can(user, 'testimony:moderate')
+  const comms =
+    showMessages || showTestimonies
+      ? {
+          newMessages: showMessages
+            ? await db.contactMessage.count({ where: newMessagesWhere() })
+            : null,
+          pendingTestimonies: showTestimonies
+            ? await db.testimonySubmission.count({ where: pendingTestimoniesWhere() })
+            : null,
+        }
+      : null
 
   // ---------------------------------------------------------- needs attention
   /*
-   * Only queues that are non-empty appear, ordered by severity. An empty
-   * "needs attention" list is itself the message — it renders as "nothing is
-   * waiting on you", which is the sentence every operational dashboard is
-   * trying to earn.
+   * Only queues that are non-empty appear, most urgent first. An empty list is
+   * itself the message — it renders as "nothing is waiting on you", which is
+   * the sentence every operational dashboard is trying to earn.
    */
   const needsAttention: AttentionItem[] = []
   if (awaitingReview > 0) {
@@ -125,7 +198,25 @@ export async function getOverview(user: SessionUser) {
       id: 'review',
       label: 'applications awaiting review',
       count: awaitingReview,
-      href: '/admin/applications?status=SUBMITTED',
+      href: '/admin/applications?status=SUBMITTED,UNDER_REVIEW',
+      tone: 'warning',
+    })
+  }
+  if (followUpsDue && followUpsDue.overdue > 0) {
+    needsAttention.push({
+      id: 'followups-overdue',
+      label: 'follow-ups overdue',
+      count: followUpsDue.overdue,
+      href: '/admin/previous-participants/people?followup=overdue',
+      tone: 'danger',
+    })
+  }
+  if (followUpsDue && followUpsDue.due - followUpsDue.overdue > 0) {
+    needsAttention.push({
+      id: 'followups-due',
+      label: 'follow-ups due',
+      count: followUpsDue.due - followUpsDue.overdue,
+      href: '/admin/previous-participants/people?followup=due',
       tone: 'warning',
     })
   }
@@ -134,29 +225,29 @@ export async function getOverview(user: SessionUser) {
       id: 'failed-rows',
       label: 'import rows failed',
       count: migration.failedRows,
-      href: '/admin/previous-participants',
+      href: '/admin/previous-participants/rows?status=FAILED',
       tone: 'danger',
     })
   }
-  if (migration && migration.invitesFailed > 0) {
+  if (migration && migration.failedInvitationRows > 0) {
     needsAttention.push({
       id: 'failed-invites',
-      label: 'invitations failed or bounced',
-      count: migration.invitesFailed,
-      href: '/admin/previous-participants',
+      label: 'invitation emails failed',
+      count: migration.failedInvitationRows,
+      href: '/admin/previous-participants/rows?invitation=FAILED',
       tone: 'danger',
     })
   }
-  if (comms && comms.newMessages > 0) {
+  if (comms?.newMessages) {
     needsAttention.push({
       id: 'messages',
-      label: 'unanswered messages',
+      label: 'unanswered new messages',
       count: comms.newMessages,
       href: '/admin/messages',
       tone: 'warning',
     })
   }
-  if (comms && comms.pendingTestimonies > 0) {
+  if (comms?.pendingTestimonies) {
     needsAttention.push({
       id: 'testimonies',
       label: 'testimonies awaiting moderation',
@@ -165,24 +256,28 @@ export async function getOverview(user: SessionUser) {
       tone: 'info',
     })
   }
+  const toneRank: Record<AttentionTone, number> = { danger: 0, warning: 1, info: 2 }
+  needsAttention.sort((a, b) => toneRank[a.tone] - toneRank[b.tone])
 
   // ------------------------------------------------------------ distributions
   const [byDepartment, byCountry, byAgeRange, departments] = await Promise.all([
     db.editionParticipation.groupBy({
       by: ['departmentId'],
-      where: { edition, application: { status: { not: 'DRAFT' } } },
+      // The same "Confirmed" definition as the card above and the list the
+      // bars open — the wording "confirmed volunteers" is finally true.
+      where: confirmedWhere,
       _count: { _all: true },
     }),
     db.volunteerProfile.groupBy({
       by: ['countryId'],
-      where: { user: { applications: { some: { status: { not: 'DRAFT' } } } } },
+      where: { user: { applications: { some: scoped({ status: { not: 'DRAFT' } }) } } },
       _count: { _all: true },
       orderBy: { _count: { countryId: 'desc' } },
       take: 8,
     }),
     db.volunteerProfile.groupBy({
       by: ['ageRange'],
-      where: { user: { applications: { some: { status: { not: 'DRAFT' } } } } },
+      where: { user: { applications: { some: scoped({ status: { not: 'DRAFT' } }) } } },
       _count: { _all: true },
     }),
     db.department.findMany({ select: { id: true, name: true } }),
@@ -194,16 +289,7 @@ export async function getOverview(user: SessionUser) {
   })
 
   // ----------------------------------------------------------------- trend
-  /*
-   * Submissions per week, last eight weeks. Raw SQL because Prisma cannot
-   * group by a truncated date; the shape is tiny and read-only.
-   */
-  const trend = await db.$queryRaw<{ week: Date; count: bigint }[]>`
-    SELECT date_trunc('week', "submittedAt") AS week, count(*) AS count
-    FROM volunteer_applications
-    WHERE "submittedAt" IS NOT NULL AND "submittedAt" > now() - interval '8 weeks'
-    GROUP BY 1 ORDER BY 1
-  `
+  const trend = await submissionTrend({ weeks: 12, edition, scope })
 
   // --------------------------------------------------------- recent activity
   const showActivity = can(user, 'audit:view')
@@ -227,30 +313,38 @@ export async function getOverview(user: SessionUser) {
     : []
 
   return {
+    /** When these numbers were computed — the page's "Updated …" line. */
+    generatedAt: new Date(),
+    edition,
+    /** True when every figure is limited to the viewer's departments. */
+    departmentScoped: scope !== null,
     event: {
       registrationOpen: settings.registration_open,
     },
     applications: {
-      total: applicationsByStatus.reduce((sum, row) => sum + row._count._all, 0),
+      /** Non-draft — the same population as /admin/applications unfiltered. */
+      registered,
       draft: appCount('DRAFT'),
       submitted: appCount('SUBMITTED'),
       underReview: appCount('UNDER_REVIEW'),
       approved: appCount('APPROVED'),
       waitlisted: appCount('WAITLISTED'),
       rejected: appCount('REJECTED'),
+      legacyStatuses,
       awaitingReview,
-      submittedThisWeek,
+      submittedLast7Days,
     },
     participations: {
-      confirmed: participationsByStatus.reduce((sum, row) => sum + row._count._all, 0),
+      confirmed,
       signedUp: partCount('SIGNED_UP'),
       assigned: partCount('ASSIGNED'),
       checkedIn: partCount('CHECKED_IN'),
       completed: partCount('COMPLETED'),
-      withdrawn: partCount('WITHDRAWN'),
+      withdrawn,
       unconfirmed,
     },
     migration,
+    followUpsDue,
     comms,
     needsAttention,
     /*
@@ -258,9 +352,6 @@ export async function getOverview(user: SessionUser) {
      * overview can link into the filtered applicant list. A bar that reports
      * "Ushering 120" and cannot tell you *which* 120 is a dead end — the
      * number is only useful if you can act on the people behind it.
-     *
-     * The counts match what the link lands on: both sides exclude DRAFT, and
-     * both reach department through this edition's participation.
      */
     distributions: {
       byDepartment: byDepartment
@@ -279,34 +370,7 @@ export async function getOverview(user: SessionUser) {
         .map((row) => ({ ageRange: row.ageRange, count: row._count._all }))
         .sort((a, b) => (a.ageRange ?? '').localeCompare(b.ageRange ?? '')),
     },
-    trend: trend.map((row) => ({ week: row.week, count: Number(row.count) })),
+    trend,
     recentActivity,
   }
-}
-
-/**
- * Human wording for audit actions shown on the overview.
- *
- * A short list on purpose — the full vocabulary belongs to the Activity Log
- * (Phase 14). Anything unlisted falls back to the raw code, which is still
- * more honest than hiding the event.
- */
-export const ACTIVITY_LABELS: Record<string, string> = {
-  'auth.register': 'New volunteer account created',
-  'auth.login': 'Signed in',
-  'auth.login_failed': 'Failed sign-in attempt',
-  'application.submitted': 'Application submitted',
-  'application.status_changed': 'Application status changed',
-  'application.updated': 'Application updated',
-  'application.exported': 'Applications exported',
-  'health.viewed': 'Health information viewed',
-  'announcement.created': 'Announcement created',
-  'settings.updated': 'Settings changed',
-  'user.role_changed': 'Administrator role changed',
-  'migration.batch_created': 'Import uploaded',
-  'migration.batch_validated': 'Import validated',
-  'migration.import_queued': 'Import started',
-  'migration.invitations_queued': 'Invitations queued',
-  'migration.invitations_sent': 'Invitations sent',
-  'migration.exported': 'Migration report downloaded',
 }

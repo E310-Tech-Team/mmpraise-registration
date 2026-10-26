@@ -39,7 +39,13 @@ export function MigrationUploadForm() {
     const formData = new FormData(event.currentTarget)
 
     startTransition(async () => {
-      const result = await uploadBatchAction(formData)
+      // Caught so a failed upload stays on the form instead of the error screen.
+      const result = await uploadBatchAction(formData).catch(() => null)
+      if (!result) {
+        setFormError('The file could not be uploaded. Please try again.')
+        document.getElementById('upload-errors')?.focus()
+        return
+      }
       if (!result.ok) {
         setErrors(result.fieldErrors ?? {})
         setFormError(result.fieldErrors ? null : result.error)

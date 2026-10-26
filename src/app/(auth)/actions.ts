@@ -10,6 +10,7 @@ import { expiresIn, generateToken, hashToken } from '@/lib/auth/tokens'
 import { identifierKey, ipKey, rateLimit } from '@/lib/security/rate-limit'
 import { sendMailSafely } from '@/lib/mail/mailer'
 import { passwordResetEmail, verificationEmail } from '@/lib/mail/templates'
+import { recordMigratedActivation } from '@/lib/migration/activity'
 import { suggestUsername } from '@/lib/validation/common'
 import { usernameSchema } from '@/lib/validation/common'
 import { parseMmpCode } from '@/lib/volunteer/mmp-code'
@@ -359,15 +360,19 @@ export async function resetPasswordAction(input: unknown): Promise<ActionResult>
     }),
   ])
 
-  // Record activation against the migration record, if this was a migrated
-  // account. Best-effort: a reporting write must never fail a password reset.
+  /*
+   * Record activation against the migration records, if this was a migrated
+   * account. Best-effort: a reporting write must never fail a password reset.
+   *
+   * Only `activatedAt` — never the invitation pipeline's own state. This used
+   * to also write `invitationStatus: 'SUPPRESSED'`, which erased whether the
+   * invitation had been SENT or FAILED and made every activated person count
+   * as "Excluded" on the batch screens.
+   */
   if (user.isPreviousEditionUser) {
-    await db.migratedUserRecord
-      .updateMany({
-        where: { matchedUserId: user.id, activatedAt: null },
-        data: { activatedAt: new Date(), invitationStatus: 'SUPPRESSED' },
-      })
-      .catch((error) => console.error('[migration] could not record activation', error))
+    await recordMigratedActivation(user.id).catch((error) =>
+      console.error('[migration] could not record activation', error),
+    )
   }
 
   // Any session opened with the old password is no longer trustworthy.
