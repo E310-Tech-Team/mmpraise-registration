@@ -16,6 +16,7 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { can, requirePermission } from '@/lib/auth/rbac'
 import { db } from '@/lib/db'
+import { inviteEligibleWhere } from '@/lib/outreach/eligibility'
 import type { MigrationField } from '@/lib/migration/csv'
 import {
   BATCH_NEXT_STEP,
@@ -109,16 +110,21 @@ export default async function MigrationBatchPage({
   const failed = rows('FAILED')
   const totalRows = rowCounts.reduce((sum, row) => sum + row._count._all, 0) || batch.totalRows
 
-  const invitable = await db.migratedUserRecord.count({
-    where: {
-      batchId: batch.id,
-      status: 'IMPORTED',
-      action: 'CREATE',
-      excludedFromInvites: false,
-      activatedAt: null,
-      invitationSentKey: null,
-    },
-  })
+  /*
+   * The same predicate the Invite button will claim with — imported from the
+   * outreach module rather than restated, so the button's number and what it
+   * does can never drift apart again. (The old hand-rolled copy had no
+   * invitationStatus filter and kept advertising rows the queue could not
+   * reach.)
+   */
+  const [invitable, sendingInvitations] = await Promise.all([
+    db.migratedUserRecord.count({ where: inviteEligibleWhere(batch.id) }),
+    // Keeps the screen's 5s pulse alive while an invitation run still has
+    // queued sends, since sending only advances while someone is watching.
+    db.outreachAttempt.count({
+      where: { run: { batchId: batch.id }, status: { in: ['QUEUED', 'SENDING'] } },
+    }),
+  ])
 
   // Only needed while the mapping can still change; once queued the file may
   // also have been purged, and re-reading it would be wasted work.
@@ -182,6 +188,7 @@ export default async function MigrationBatchPage({
             importableRows={importable}
             invitableRows={invitable}
             failedRows={failed}
+            sendingInvitations={sendingInvitations > 0}
             can={{
               execute: canExecute,
               invite: can(user, 'migration:invite'),

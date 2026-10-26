@@ -485,3 +485,61 @@ export async function seedTestimony(options: {
 
   return { id, email, title }
 }
+
+/**
+ * A previous participant exactly as the importer leaves them: an account with
+ * the unusable-password sentinel (cannot sign in until a reset), the migrated
+ * flags, and history in one earlier edition — but no application, which is
+ * precisely the population the old "not yet confirmed" figure could not see.
+ */
+export async function seedPreviousParticipant(prefix = 'prev'): Promise<{
+  id: string
+  email: string
+  firstName: string
+  lastName: string
+}> {
+  const connectionString = process.env.DATABASE_URL
+  if (!connectionString) throw new Error('DATABASE_URL is not set')
+
+  const stamp = randomUUID().replace(/-/g, '').slice(0, 16)
+  const id = `u_${stamp}`
+  const email = `${prefix}.${stamp}@example.com`
+  const firstName = 'Former'
+  const lastName = `Volunteer${stamp.slice(0, 6)}`
+
+  const client = new Client({ connectionString })
+  await client.connect()
+  try {
+    await client.query('BEGIN')
+    const seq = await client.query(`SELECT nextval('mmp_code_seq') AS v`)
+    const mmpCode = `MMP${String(seq.rows[0].v).padStart(7, '0')}`
+    await client.query(
+      `INSERT INTO users (id, email, username, "passwordHash", "mmpCode", "isPreviousEditionUser",
+                          "mustReviewProfile", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, '!migrated-no-password', $4, true, true, now(), now())`,
+      [id, email, `${prefix}${stamp}`.slice(0, 30), mmpCode],
+    )
+    await client.query(`INSERT INTO user_roles (id, "userId", role) VALUES ($1, $2, 'VOLUNTEER')`, [
+      `r_${stamp}`,
+      id,
+    ])
+    await client.query(
+      `INSERT INTO volunteer_profiles (id, "userId", "firstName", "lastName", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, now(), now())`,
+      [`p_${stamp}`, id, firstName, lastName],
+    )
+    await client.query(
+      `INSERT INTO previous_edition_participations (id, "userId", edition, year, "previousDepartment", "createdAt")
+       VALUES ($1, $2, '2025', 2025, 'Welfare', now())`,
+      [`pep_${stamp}`, id],
+    )
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    await client.end().catch(() => undefined)
+  }
+
+  return { id, email, firstName, lastName }
+}

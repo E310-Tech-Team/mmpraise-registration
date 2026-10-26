@@ -15,6 +15,10 @@ export type SettingsMap = {
   event_dates: string[]
   support_email: string
   minor_age_ranges: string[]
+  /** Days a person is left alone after ANY successful outreach email. */
+  reminder_cooldown_days: number
+  /** Hard cap on recipients per reminder run. */
+  reminder_max_per_run: number
 }
 
 const DEFAULTS: SettingsMap = {
@@ -32,6 +36,8 @@ const DEFAULTS: SettingsMap = {
   event_dates: [],
   support_email: 'volunteers@mmpraise.org',
   minor_age_ranges: ['AGE_00_15'],
+  reminder_cooldown_days: 7,
+  reminder_max_per_run: 500,
 }
 
 export const getSettings = cache(async (): Promise<SettingsMap> => {

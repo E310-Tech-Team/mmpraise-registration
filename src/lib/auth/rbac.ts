@@ -52,6 +52,13 @@ export const PERMISSIONS = [
   'migration:execute',
   'migration:invite',
   'migration:export',
+  /*
+   * Logging manual follow-up contact with previous participants. Separate from
+   * `migration:invite` on purpose: the people phoning through the unresponded
+   * list should be able to record what was said without also being able to
+   * mass-email fourteen thousand people.
+   */
+  'migration:followup',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
@@ -81,8 +88,10 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'testimony:contact_view',
     'contact:manage',
     // View only. Creating, running and emailing a migration are granted
-    // explicitly to the people who do that work.
+    // explicitly to the people who do that work. Logging follow-up calls is
+    // part of coordinating registrations, so it comes with the role.
     'migration:view',
+    'migration:followup',
   ],
 
   // Sees only applications for departments they are scoped to.

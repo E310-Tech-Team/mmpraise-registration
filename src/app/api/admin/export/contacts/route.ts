@@ -12,6 +12,7 @@ import {
   xlsxResponse,
 } from '@/lib/admin/export'
 import { STATUS_LABELS } from '@/lib/applications/service'
+import { applicationProgress } from '@/lib/admin/progress'
 import { formatDate } from '@/lib/utils'
 
 /**
@@ -45,6 +46,8 @@ const COLUMNS = [
   'Email',
   'Phone',
   'Status',
+  'Progress',
+  'Last activity',
   'Department',
   'Country',
   'Consented to volunteer communication',
@@ -64,10 +67,12 @@ export async function GET(request: Request) {
 
   const applications = await db.volunteerApplication.findMany({
     where,
-    orderBy: { submittedAt: 'desc' },
+    orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { updatedAt: 'desc' }],
     take: MAX_ROWS,
     select: {
       status: true,
+      currentStep: true,
+      updatedAt: true,
       participations: {
         where: { edition: eventConfig.edition },
         select: {
@@ -104,6 +109,8 @@ export async function GET(request: Request) {
       application.user.email,
       application.user.phone ?? '',
       STATUS_LABELS[application.status],
+      applicationProgress(application.status, application.currentStep),
+      formatDate(application.updatedAt, true),
       participation?.department?.name ?? '',
       profile?.country?.name ?? '',
       /*

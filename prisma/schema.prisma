@@ -298,8 +298,14 @@ model User {
   permissionsGranted     AdminPermissionGrant[] @relation("PermissionGrantor")
   roleHistory            RoleAssignmentHistory[] @relation("RoleSubject")
   roleChangesMade        RoleAssignmentHistory[] @relation("RoleActor")
+  outreachRunsCreated    OutreachRun[]           @relation("OutreachRunCreator")
+  outreachAttempts       OutreachAttempt[]       @relation("OutreachAttempts")
+  contactLogs            ParticipantContactLog[] @relation("ContactLogSubject")
+  contactLogsAuthored    ParticipantContactLog[] @relation("ContactLogAuthor")
 
   @@index([createdAt])
+  // Response-stage and reminder-eligibility scans over ~14k imported people.
+  @@index([isPreviousEditionUser, emailVerifiedAt])
   @@map("users")
 }
 
@@ -853,6 +859,8 @@ model EditionParticipation {
 
   @@unique([applicationId, edition])
   @@index([edition, status])
+  // The confirmation predicate behind "Confirmed" and every response stage.
+  @@index([edition, confirmedAt])
   @@index([departmentId, edition])
   @@map("edition_participations")
 }
@@ -1356,6 +1364,14 @@ model MigrationBatch {
   columnMapping    Json
 
   sendInvitations Boolean @default(false)
+  /**
+   * When the upload-time "send invitations" choice was honoured. A one-shot
+   * guard: the auto-queue on completion fires only while this is null, set via
+   * an atomic updateMany so concurrent workers cannot both fire it. Backfilled
+   * to now() for historical batches so the auto-queue never fires
+   * retroactively on data imported before this existed.
+   */
+  invitationsAutoQueuedAt DateTime?
 
   status MigrationBatchStatus @default(DRAFT)
 
@@ -1378,6 +1394,7 @@ model MigrationBatch {
   records   MigratedUserRecord[]
   jobs      ImportJob[]
   participations PreviousEditionParticipation[]
+  outreachRuns   OutreachRun[]
 
   // The same file twice for the same edition is the same import.
   @@unique([fileChecksum, sourceEdition])
@@ -1428,6 +1445,7 @@ model MigratedUserRecord {
 
   batch       MigrationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   matchedUser User?          @relation("MigratedRecordUser", fields: [matchedUserId], references: [id], onDelete: SetNull)
+  outreachAttempts OutreachAttempt[] @relation("RecordOutreachAttempts")
 
   // A row number is unique within its batch, which makes re-processing a
   // chunk safe: the upsert target is deterministic.
@@ -1435,6 +1453,8 @@ model MigratedUserRecord {
   @@index([normalisedEmail])
   @@index([batchId, status])
   @@index([invitationStatus])
+  // Person-level joins (every activation and stage query goes user → rows).
+  @@index([matchedUserId])
   @@map("migrated_user_records")
 }
 
@@ -1500,6 +1520,214 @@ model ImportJob {
   @@unique([batchId, kind, offset])
   @@index([status, createdAt])
   @@map("import_jobs")
+}
+
+// ---------------------------------------------------------------------------
+// Outreach — every bulk email to participants, as auditable runs and attempts
+// ---------------------------------------------------------------------------
+
+enum OutreachKind {
+  /// The one-time migration invitation. One-send protection lives on the
+  /// record's invitationSentKey, exactly as before.
+  INVITATION
+  /// "Activate your account" — imported people who cannot yet sign in.
+  REMINDER_UNACTIVATED
+  /// "Confirm your availability" — anyone with a usable account and no
+  /// confirmed participation for the edition.
+  REMINDER_UNCONFIRMED
+}
+
+enum OutreachRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  CANCELLED
+}
+
+enum OutreachAttemptStatus {
+  QUEUED
+  /// Claimed by a worker. Orphans (worker crash) are swept back to QUEUED
+  /// after 15 minutes — worst case a delayed send, never a duplicate.
+  SENDING
+  /// The mail transport accepted the message. Whether it was *delivered* is a
+  /// different fact this system does not know (no provider webhook); see
+  /// `mailerMode` for what "accepted" meant.
+  SENT
+  FAILED
+  /// No longer eligible when the worker reached it (activated meanwhile,
+  /// excluded, confirmed, inside cooldown). The reason is in `error`.
+  SKIPPED
+}
+
+/**
+ * One administrator-triggered send run — an invitation wave or a reminder
+ * campaign. The run records the audience definition it was approved with
+ * (`filtersJson`, the counted-bulk contract's evidence) and per-status totals;
+ * the per-recipient truth lives in OutreachAttempt.
+ */
+model OutreachRun {
+  id          String       @id @default(cuid())
+  kind        OutreachKind
+  /// Edition the run was created for, snapshotted from eventConfig.
+  edition     String
+  templateKey String
+  /// Set for INVITATION runs only.
+  batchId     String?
+  /// Audience snapshot shown in the confirmation dialog.
+  filtersJson Json?
+
+  cooldownDays  Int @default(7)
+  maxRecipients Int @default(500)
+
+  plannedCount Int @default(0)
+  sentCount    Int @default(0)
+  failedCount  Int @default(0)
+  skippedCount Int @default(0)
+
+  /**
+   * 'smtp' | 'file'. With no SMTP configured the mailer writes files to
+   * ./storage/mail and still reports success — recording the mode here is what
+   * keeps a development run visibly non-real in every report built on it.
+   */
+  mailerMode String
+
+  status      OutreachRunStatus @default(QUEUED)
+  createdById String?
+  createdAt   DateTime          @default(now())
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdBy User?             @relation("OutreachRunCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  batch     MigrationBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  attempts  OutreachAttempt[]
+  jobs      OutreachJob[]
+
+  @@index([kind, createdAt])
+  @@index([status])
+  @@map("outreach_runs")
+}
+
+/**
+ * One recipient of one run. Append-only: history is never rewritten, which is
+ * what makes "how many attempts did this person get, and when?" answerable —
+ * the question the old invitation pipeline could not answer.
+ */
+model OutreachAttempt {
+  id       String  @id @default(cuid())
+  runId    String
+  userId   String?
+  /// The MigratedUserRecord, for INVITATION runs.
+  recordId String?
+  /// Address actually attempted, snapshotted — the account's email can change.
+  email    String
+
+  /// Denormalised from the run so the cooldown predicate reads one table.
+  kind OutreachKind
+
+  status     OutreachAttemptStatus @default(QUEUED)
+  error      String?
+  mailerMode String?
+  queuedAt   DateTime              @default(now())
+  /** When a worker claimed it — how SENDING orphans are aged for the sweep. */
+  claimedAt  DateTime?
+  sentAt     DateTime?
+
+  /// `${runId}:${userId ?? recordId}` — one attempt per recipient per run,
+  /// whatever double-clicks, retries or concurrent workers do.
+  dedupeKey String @unique
+
+  run    OutreachRun         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  user   User?               @relation("OutreachAttempts", fields: [userId], references: [id], onDelete: SetNull)
+  record MigratedUserRecord? @relation("RecordOutreachAttempts", fields: [recordId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status, sentAt])
+  @@index([runId, status])
+  @@map("outreach_attempts")
+}
+
+/**
+ * Queue chunks for one outreach run. Same claiming discipline as ImportJob
+ * (FOR UPDATE SKIP LOCKED), but keyed by a per-run sequence number: a new run
+ * always gets fresh jobs, so "re-queue created nothing because the offsets
+ * already existed" — the bug that silently stranded half the invitation
+ * queue — cannot recur by construction. `size` matches what one pass actually
+ * sends, so the job count always equals send capacity.
+ */
+model OutreachJob {
+  id    String @id @default(cuid())
+  runId String
+  seq   Int
+
+  status      JobStatus @default(PENDING)
+  size        Int       @default(50)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lastError   String?
+
+  claimedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  run OutreachRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([status, createdAt])
+  @@map("outreach_jobs")
+}
+
+// ---------------------------------------------------------------------------
+// Manual follow-up — the phone-bank's memory
+// ---------------------------------------------------------------------------
+
+enum ContactChannel {
+  PHONE
+  WHATSAPP
+  SMS
+  EMAIL
+  IN_PERSON
+  OTHER
+}
+
+/**
+ * What the member of staff concluded — deliberately NOT the participant's
+ * response state, which lives on the authoritative records (activation on the
+ * user, confirmation on the participation). The due-queue derives "resolved by
+ * an actual response" instead of anyone editing these rows.
+ */
+enum ContactOutcome {
+  AWAITING_RESPONSE
+  NEEDS_ASSISTANCE
+  DECLINED
+  UNREACHABLE
+  RESOLVED
+}
+
+/**
+ * One manual contact with one participant. Append-only — a correction is a
+ * new entry, so the history of who said what, when, survives everybody.
+ */
+model ParticipantContactLog {
+  id      String  @id @default(cuid())
+  userId  String
+  adminId String?
+
+  channel        ContactChannel
+  outcome        ContactOutcome
+  notes          String?
+  contactedAt    DateTime       @default(now())
+  nextFollowUpAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  user  User  @relation("ContactLogSubject", fields: [userId], references: [id], onDelete: Cascade)
+  admin User? @relation("ContactLogAuthor", fields: [adminId], references: [id], onDelete: SetNull)
+
+  // Latest-per-person lookups and the due/overdue queue.
+  @@index([userId, contactedAt(sort: Desc)])
+  @@index([nextFollowUpAt])
+  @@map("participant_contact_logs")
 }
 
 model NewsletterSubscriber {

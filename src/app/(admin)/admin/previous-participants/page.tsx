@@ -9,7 +9,10 @@ import {
   EmptyState,
   buttonClass,
 } from '@/components/ui/primitives'
+import { ParticipantsTabs } from '@/components/admin/participants/participants-tabs'
+import { eventConfig } from '@/config/site'
 import { requirePermission, can } from '@/lib/auth/rbac'
+import { participantSummary } from '@/lib/admin/participants'
 import { db } from '@/lib/db'
 import { BATCH_STATUS_LABELS, BATCH_STATUS_TONES } from '@/lib/migration/labels'
 import { formatDate } from '@/lib/utils'
@@ -26,7 +29,7 @@ export const metadata: Metadata = { title: 'Previous participants' }
 export default async function PreviousParticipantsPage() {
   const user = await requirePermission('migration:view')
 
-  const [batches, participantCount, activatedCount, invitedCount] = await Promise.all([
+  const [batches, people] = await Promise.all([
     db.migrationBatch.findMany({
       orderBy: { createdAt: 'desc' },
       take: 50,
@@ -35,9 +38,13 @@ export default async function PreviousParticipantsPage() {
         _count: { select: { records: true } },
       },
     }),
-    db.user.count({ where: { isPreviousEditionUser: true } }),
-    db.user.count({ where: { isPreviousEditionUser: true, emailVerifiedAt: { not: null } } }),
-    db.migratedUserRecord.count({ where: { invitationStatus: { in: ['SENT', 'DELIVERED'] } } }),
+    /*
+     * Person-level, from the shared module. The old trio mixed entities — it
+     * counted Users for "imported"/"activated" but migration *rows* for
+     * "invitations sent", and activation used to erase the SENT status, so
+     * "Invited" fell every time someone responded.
+     */
+    participantSummary(eventConfig.edition),
   ])
 
   return (
@@ -58,13 +65,19 @@ export default async function PreviousParticipantsPage() {
         )}
       </div>
 
+      <ParticipantsTabs active="batches" />
+
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="People imported" value={participantCount} />
-        <Stat label="Invitations sent" value={invitedCount} />
+        <Stat label="Previous participants" value={people.total} hint="Unique people, across every import file." />
+        <Stat
+          label="People invited"
+          value={people.invitedEver}
+          hint="Ever sent an invitation — responding does not remove anyone from this figure."
+        />
         <Stat
           label="Accounts activated"
-          value={activatedCount}
-          hint="Confirmed an email address after being invited."
+          value={people.activated}
+          hint="Can sign in: set a password, or already had an account."
         />
       </div>
 

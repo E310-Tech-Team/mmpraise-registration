@@ -76,3 +76,41 @@ export async function sendMailSafely(message: MailMessage): Promise<boolean> {
     return false
   }
 }
+
+/** Which transport a send would use right now. */
+export function getMailerMode(): 'smtp' | 'file' {
+  return env.SMTP_HOST ? 'smtp' : 'file'
+}
+
+export type MailSendResult = {
+  /** The transport accepted the message (or the dev file was written). */
+  accepted: boolean
+  /** 'smtp' = real acceptance; 'file' = written to ./storage/mail in dev. */
+  mode: 'smtp' | 'file'
+  error?: string
+}
+
+/**
+ * Send and say what actually happened — for callers that *record* outcomes.
+ *
+ * `sendMailSafely`'s boolean deliberately hides the dev/file distinction, which
+ * is fine for fire-and-forget transactional mail but poisonous for outreach
+ * reporting: a run marked "sent" in development would be indistinguishable from
+ * a real one. Recording `mode` alongside the outcome is what keeps "Sent"
+ * honest — it always means "this transport accepted it", and the transport is
+ * named.
+ */
+export async function sendMailTracked(message: MailMessage): Promise<MailSendResult> {
+  const mode = getMailerMode()
+  try {
+    await sendMail(message)
+    return { accepted: true, mode }
+  } catch (error) {
+    console.error('[mail] delivery failed', { to: message.to, subject: message.subject, error })
+    return {
+      accepted: false,
+      mode,
+      error: error instanceof Error ? error.message.slice(0, 500) : 'Mail transport error',
+    }
+  }
+}

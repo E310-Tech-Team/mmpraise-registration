@@ -14,6 +14,7 @@ import {
   getDepartments,
   getStates,
 } from '@/lib/reference'
+import { applicationProgress } from '@/lib/admin/progress'
 import { formatDate, initials } from '@/lib/utils'
 import { AGE_RANGES } from '@/lib/validation/registration'
 
@@ -36,6 +37,11 @@ export default async function ApplicationsPage({
     churchRegionId: params.churchRegionId,
     churchProvinceId: params.churchProvinceId,
     ageRange: params.ageRange,
+    confirmed: params.confirmed,
+    participation: params.participation,
+    submittedFrom: params.submittedFrom,
+    submittedTo: params.submittedTo,
+    imported: params.imported,
     page: params.page ? Number(params.page) : 1,
     sort: (params.sort as Filters['sort']) ?? 'newest',
   }
@@ -133,10 +139,13 @@ export default async function ApplicationsPage({
                   return (
                     <tr key={item.id} className="border-b border-line last:border-0 hover:bg-surface-sunken">
                       <td className="px-4 py-3">
-                        <Link
-                          href={`/admin/applications/${item.id}`}
-                          className="flex items-center gap-3 font-semibold text-primary underline underline-offset-4"
-                        >
+                        {/*
+                          Drafts are not reviewable, so the review page refuses
+                          them; they get no link, just who they are and how to
+                          reach them — which is what a follow-up needs.
+                        */}
+                        {item.status === 'DRAFT' ? (
+                          <div className="flex items-center gap-3 font-semibold text-ink">
                           {profile?.photoDocumentId ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -158,7 +167,35 @@ export default async function ApplicationsPage({
                             </span>
                             <span className="block truncate text-xs font-normal text-muted">{item.user.email}</span>
                           </span>
-                        </Link>
+                                                  </div>
+                        ) : (
+                          <Link
+                            href={`/admin/applications/${item.id}`}
+                            className="flex items-center gap-3 font-semibold text-primary underline underline-offset-4"
+                          >
+                          {profile?.photoDocumentId ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={`/api/files/${profile.photoDocumentId}`}
+                              alt=""
+                              className="size-9 shrink-0 rounded-full border border-line object-cover"
+                            />
+                          ) : (
+                            <span
+                              aria-hidden
+                              className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-bold text-white"
+                            >
+                              {initials(profile?.firstName, profile?.lastName)}
+                            </span>
+                          )}
+                          <span className="min-w-0">
+                            <span className="block truncate">
+                              {profile?.firstName} {profile?.lastName}
+                            </span>
+                            <span className="block truncate text-xs font-normal text-muted">{item.user.email}</span>
+                          </span>
+                                                  </Link>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-body">
                         {item.user.mmpCode ?? item.registrationId}
@@ -173,7 +210,21 @@ export default async function ApplicationsPage({
                       <td className="px-4 py-3 text-body">
                         {AGE_RANGES.find((a) => a.value === profile?.ageRange)?.label ?? '—'}
                       </td>
-                      <td className="px-4 py-3 text-body">{formatDate(item.submittedAt)}</td>
+                      <td className="px-4 py-3 text-body">
+                        {item.status === 'DRAFT' ? (
+                          <>
+                            <span className="block text-xs">
+                              {applicationProgress(item.status, item.currentStep)}
+                            </span>
+                            <span className="block text-xs text-muted">
+                              last saved {formatDate(item.updatedAt)}
+                              {item.user.phone ? ` · ${item.user.phone}` : ''}
+                            </span>
+                          </>
+                        ) : (
+                          formatDate(item.submittedAt)
+                        )}
+                      </td>
                       {/*
                         Review age, for reviewable rows only. A decided
                         application is not "waiting" however old it is.

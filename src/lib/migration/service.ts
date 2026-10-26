@@ -12,6 +12,7 @@ import {
   type MigrationField,
   type ParsedCsv,
 } from './csv'
+import { createInvitationRun } from '@/lib/outreach/service'
 import { hasError, mappingErrors, normaliseEmail, validateRow } from './validate'
 import { refreshBatchStatus } from './worker'
 
@@ -430,58 +431,21 @@ export async function queueImport(params: {
 /**
  * Queue invitation emails for everyone this batch created.
  *
- * Always a separate, explicit step, even when the batch was uploaded with
- * "send invitations" ticked. Emailing several thousand people is the one action
- * in this module that cannot be undone, and it should never happen as a side
- * effect of pressing import.
+ * Always a separate, explicit step from the administrator's side (the
+ * upload-time checkbox is honoured through this same path when the import
+ * completes). Emailing several thousand people is the one action in this
+ * module that cannot be undone, and it should never happen twice: the run's
+ * per-recipient attempts and each record's one-send key see to that.
+ *
+ * Since the outreach rework this is a thin wrapper: the eligibility claim, the
+ * run, its attempts and its correctly-sized jobs all live in
+ * src/lib/outreach/service.ts, shared with reminder campaigns.
  */
 export async function queueInvitations(params: {
   batchId: string
   actorId: string
 }): Promise<{ ok: true; queued: number } | { ok: false; error: string }> {
-  const batch = await db.migrationBatch.findUnique({ where: { id: params.batchId } })
-  if (!batch) return { ok: false, error: 'That batch no longer exists.' }
-  if (batch.status !== 'COMPLETED' && batch.status !== 'COMPLETED_WITH_WARNINGS') {
-    return { ok: false, error: 'Wait until the import has finished before sending invitations.' }
-  }
-
-  /*
-   * Only accounts this import created, that nobody has activated, and that an
-   * administrator has not excluded. Someone matched to an existing account can
-   * already sign in and must not be told to reset a password they have.
-   */
-  const eligible = await db.migratedUserRecord.updateMany({
-    where: {
-      batchId: batch.id,
-      status: 'IMPORTED',
-      action: 'CREATE',
-      excludedFromInvites: false,
-      activatedAt: null,
-      invitationStatus: { in: ['NOT_QUEUED', 'FAILED'] },
-      invitationSentKey: null,
-    },
-    data: { invitationStatus: 'QUEUED', invitationError: null },
-  })
-
-  if (eligible.count === 0) {
-    return { ok: false, error: 'There is nobody left to invite in this batch.' }
-  }
-
-  const jobs: { batchId: string; kind: string; offset: number; size: number }[] = []
-  for (let offset = 0; offset < eligible.count; offset += CHUNK_SIZE) {
-    jobs.push({ batchId: batch.id, kind: 'invite', offset, size: CHUNK_SIZE })
-  }
-  await db.importJob.createMany({ data: jobs, skipDuplicates: true })
-
-  await audit({
-    action: 'migration.invitations_queued',
-    entityType: 'MigrationBatch',
-    entityId: batch.id,
-    actorId: params.actorId,
-    metadata: { queued: eligible.count },
-  })
-
-  return { ok: true, queued: eligible.count }
+  return createInvitationRun({ batchId: params.batchId, actorId: params.actorId })
 }
 
 export async function cancelBatch(params: {

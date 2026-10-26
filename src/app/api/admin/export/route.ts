@@ -13,6 +13,7 @@ import {
 } from '@/lib/admin/export'
 import { getLookupOptions } from '@/lib/reference'
 import { STATUS_LABELS } from '@/lib/applications/service'
+import { applicationProgress } from '@/lib/admin/progress'
 import { formatDate } from '@/lib/utils'
 import { AGE_RANGES, DENOMINATIONS } from '@/lib/validation/registration'
 
@@ -34,7 +35,11 @@ const COLUMNS = [
   'MMP number',
   'Registration ID',
   'Status',
+  // For follow-up: where a draft stopped, and when the person last touched it.
+  'Progress',
   'Submitted',
+  'Last activity',
+  'Account created',
   'First name',
   'Last name',
   'Gender',
@@ -70,7 +75,8 @@ export async function GET(request: Request) {
 
   const applications = await db.volunteerApplication.findMany({
     where,
-    orderBy: { submittedAt: 'desc' },
+    // Submitted newest first; drafts (no submission date) by latest activity.
+    orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { updatedAt: 'desc' }],
     take: MAX_ROWS,
     include: {
       participations: {
@@ -87,6 +93,7 @@ export async function GET(request: Request) {
           email: true,
           phone: true,
           mmpCode: true,
+          createdAt: true,
           profile: {
             include: {
               country: { select: { name: true } },
@@ -118,7 +125,10 @@ export async function GET(request: Request) {
       application.user.mmpCode ?? '',
       application.registrationId,
       STATUS_LABELS[application.status],
+      applicationProgress(application.status, application.currentStep),
       application.submittedAt ? formatDate(application.submittedAt) : '',
+      formatDate(application.updatedAt, true),
+      formatDate(application.user.createdAt),
       profile?.firstName ?? '',
       profile?.lastName ?? '',
       profile?.gender ?? '',

@@ -76,6 +76,18 @@ export const AUDIT_ACTIONS = [
   'migration.invitations_sent',
   'migration.exported',
   'migration.upload_purged',
+
+  /*
+   * Previous-participant follow-up and outreach. Contact logs are personal
+   * data about reluctance and reachability; reminder runs email people in
+   * bulk. Both belong in the security view.
+   */
+  'migration.contact_logged',
+  'migration.contacts_bulk_logged',
+  'migration.reminder_run_created',
+  'migration.reminder_run_cancelled',
+  'migration.outreach_completed',
+  'migration.profile_reviewed',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

@@ -17,6 +17,7 @@ Shared rules that apply to every phase are at the bottom. Read them once.
 
 | | Delivered |
 |---|---|
+| **Operational dashboard & follow-up (2026-10-13)** | The overview audited figure by figure and rebuilt on one predicate vocabulary (`src/lib/admin/metrics.ts`, `src/lib/admin/participants.ts`; dictionary in [METRICS.md](METRICS.md)) shared by the overview, every list it links to, and the exports — an e2e test opens every tile and asserts the list shows the same number. Fixed: imported/activated counting users while invited counted rows; activation overwriting invitation history with SUPPRESSED (repair migration restores SENT from sent keys); imported people invisible to "not yet confirmed"; the department chart counting unconfirmed and withdrawn people under a "confirmed" label; "awaiting review" opening only half its population; the overview ignoring department scope; test data in comms counts; dead tiles; UTC/Lagos drift; unvalidated `?status=`. Percentages always name their denominator (N/A on zero). Recharts charts (trend, response stages, participation) as client islands over server data, each with a linked data table as the keyboard path. **Three invitation-queue bugs** that stranded or deadlocked bulk invitations fixed structurally: every bulk email is now an `OutreachRun` of per-recipient `OutreachAttempt`s. New: person-level People view (one row per person across imports), person detail, cross-batch Import rows view, filtered CSV export, append-only contact log with due/overdue queues derived from real responses, reminder campaigns (two audiences, counted preview, send-time re-check, cooldown, caps), profile review recorded at wizard submission. |
 | **Volunteer dashboard** | Nine-stage journey, lifecycle-aware hero, notifications derived from real timestamps, announcements, FAQs, resources, accommodation notice. |
 | **Admin shell** | Grouped navigation (Overview / Applications / People / Communications / Content / Configuration / Activity and security). Reference Data removed from the top level; Previous participants in its place. |
 | **Permissions foundation** | `AdminPermissionGrant` overrides that grant *and* revoke, `RoleAssignmentHistory`, admin disable/suspend with automatic lapse, enforced at the `can()` gate. |
@@ -549,11 +550,18 @@ when the scheduler lands, keep everything 24 months and security-view entries
 
 ## Phase 15 — Cross-cutting finish
 
-- **Scheduler.** The migration queue advances from the batch screen because
-  there is no cron. Announcement scheduling makes a real one necessary. One
-  worker entry point, called by cron *and* the UI.
+- **Scheduler.** The import queue advances from the batch screen and outreach
+  runs (invitations, reminders) advance while the batch screen or reminder
+  dialog is open — there is no cron. Announcement scheduling and unattended
+  reminder sending both need a real one. One worker entry point
+  (`runQueue()` + `runOutreachQueue()`), called by cron *and* the UI; a
+  secret-guarded `POST /api/jobs/run` is the planned shape.
 - **Upload retention job.** `purgeExpiredUploads()` exists; nothing calls it.
 - **Test-data separation.** Recurs in Phases 8, 9 and 14 — solve once.
+  (The overview's comms counts already exclude test/spam rows.)
+- **Delivery tracking.** "Sent" means SMTP acceptance; delivery and bounces
+  need a provider webhook writing `DELIVERED`/`BOUNCED`.
+- **Edition selector on the overview.** Reports the current edition only.
 - **Complete state set** everywhere: loading, empty, error, partial success,
   permission denied, queue unavailable, network failure, no records, no search
   matches. Every error says what happened, whether data was saved, and what to

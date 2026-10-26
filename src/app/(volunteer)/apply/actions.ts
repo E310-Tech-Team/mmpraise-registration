@@ -6,6 +6,7 @@ import { isUniqueViolation } from '@/lib/db-errors'
 import type { AgeRange, Denomination, Gender } from '@/generated/prisma/enums'
 import { env } from '@/lib/env'
 import { audit } from '@/lib/audit'
+import { recordProfileReviewed } from '@/lib/migration/activity'
 import { requireUser } from '@/lib/auth/rbac'
 import { headers } from 'next/headers'
 import { clientIp } from '@/lib/auth/session'
@@ -506,6 +507,21 @@ export async function submitApplicationAction(values: unknown): Promise<ActionRe
     actorId: user.id,
     metadata: { registrationId, departmentId: participation.departmentId, edition: participation.edition },
   })
+
+  /*
+   * Submission by a migrated account is the profile review the invitation
+   * email promises: every prefilled step has now demonstrably been walked.
+   * Best-effort — a reporting write must never fail a submission.
+   */
+  const migratedState = await db.user.findUnique({
+    where: { id: user.id },
+    select: { isPreviousEditionUser: true, profileReviewedAt: true },
+  })
+  if (migratedState?.isPreviousEditionUser && !migratedState.profileReviewedAt) {
+    await recordProfileReviewed(user.id).catch((error) =>
+      console.error('[migration] could not record profile review', error),
+    )
+  }
 
   // Confirmation email — deliberately excludes health and emergency details.
   const message = submissionEmail({
