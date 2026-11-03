@@ -17,7 +17,7 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
-import { CtaPair, RegisterCta, VolunteerCta } from '@/components/site/cta'
+import { CtaPair, VolunteerCta } from '@/components/site/cta'
 import { GalleryGrid } from '@/components/site/gallery-grid'
 import { Hero } from '@/components/site/hero'
 import { HistoryTimeline } from '@/components/site/history-timeline'

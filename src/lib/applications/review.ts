@@ -3,8 +3,8 @@ import { db } from '@/lib/db'
 import type { ReviewSection } from '@/components/apply/steps/review-step'
 import { formatAnswer } from '@/lib/questions/engine'
 import { getDepartmentQuestions, getLookupOptions } from '@/lib/reference'
-import { formatDate, humanise } from '@/lib/utils'
-import { AGE_RANGES, DENOMINATIONS, SHIFT_PERIODS } from '@/lib/validation/registration'
+import { humanise } from '@/lib/utils'
+import { AGE_RANGES, DENOMINATIONS } from '@/lib/validation/registration'
 import type { WizardState } from './service'
 
 /**
@@ -13,7 +13,7 @@ import type { WizardState } from './service'
  * three can never drift apart.
  */
 export async function buildReviewSections(state: WizardState): Promise<ReviewSection[]> {
-  const { application, participation, profile, answers, availability, emergency, health, user } = state
+  const { application, participation, profile, answers, emergency, user } = state
 
   const [occupations, educations, discoveries] = await Promise.all([
     getLookupOptions('OCCUPATION'),
