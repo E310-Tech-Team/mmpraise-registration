@@ -184,7 +184,7 @@ export default async function AboutPage() {
               className="mt-8"
               align="center"
               onDark
-              registerLabel={user ? 'Continue registration' : 'Register to attend'}
+              registerLabel={user ? 'Confirm your availability' : 'Register to attend'}
               itemProps={{ 'data-hero-cta': '' }}
             />
           </div>

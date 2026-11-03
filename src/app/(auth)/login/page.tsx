@@ -18,7 +18,7 @@ export default async function LoginPage({
 
   return (
     <Card>
-      <CardHeader title="Sign in" description="Welcome back — continue your registration or manage your volunteer profile." />
+      <CardHeader title="Sign in" description="Welcome back — confirm your availability or manage your volunteer profile." />
       <CardBody>
         {params.reset === '1' && (
           <p className="mb-5 rounded-card border border-success/30 bg-success-subtle p-4 text-sm text-body" role="status">

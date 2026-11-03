@@ -32,7 +32,7 @@ export default async function VerifyEmailPage({
                   : 'Thank you. You will now receive registration and volunteer updates at this address.'}
               </Alert>
               <Link href={user ? '/apply' : '/login?verified=1'} className={buttonClass({ size: 'lg', className: 'w-full' })}>
-                {user ? 'Continue your registration' : 'Sign in'}
+                {user ? 'Confirm your availability' : 'Sign in'}
               </Link>
             </>
           ) : (
@@ -65,12 +65,12 @@ export default async function VerifyEmailPage({
               The link was sent to <strong className="text-ink">{user.email}</strong>. It expires in 24 hours.
             </p>
             <p className="text-sm text-muted">
-              You can continue your registration now — confirmation is only required before your
+              You can confirm your availability now — confirmation is only required before your
               application is reviewed.
             </p>
             <ResendVerification />
             <Link href="/apply" className="inline-block font-semibold text-primary underline underline-offset-4">
-              Continue your registration
+              Confirm your availability
             </Link>
           </>
         ) : (
