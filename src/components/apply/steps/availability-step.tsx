@@ -51,10 +51,10 @@ export function AvailabilityStep({
           <div className="space-y-4">
             <div>
               <h3 className="font-display text-lg font-bold text-ink">
-                Are you going to be available for this year's edition?
+                Are you going to be available for this year&apos;s edition?
               </h3>
               <p className="mt-1 text-sm text-muted">
-                Please confirm whether you will be available to take part and serve in Marathon Messiah's Praise this year.
+                Please confirm whether you will be available to take part and serve in Marathon Messiah&apos;s Praise this year.
               </p>
             </div>
 

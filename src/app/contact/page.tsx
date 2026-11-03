@@ -17,7 +17,7 @@ import {
   Ticket,
 } from 'lucide-react'
 import { ContactForm } from '@/components/site/contact-form'
-import { RegisterCta, VolunteerCta } from '@/components/site/cta'
+import { VolunteerCta } from '@/components/site/cta'
 import { Hero } from '@/components/site/hero'
 import { MapEmbed } from '@/components/site/map-embed'
 import { SiteFooter } from '@/components/site/site-footer'
@@ -539,7 +539,6 @@ export default async function ContactPage() {
 
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
               <VolunteerCta />
-              <RegisterCta onDark />
               {links.livestream && (
                 <Link
                   href={links.livestream}

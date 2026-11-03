@@ -135,19 +135,19 @@ describe('the Total and Draft populations (dashboard follow-up)', () => {
 describe('applicationProgress', () => {
   it('names the step a draft stopped at, for a follow-up call', () => {
     expect(applicationProgress('DRAFT', 3)).toBe(
-      'Draft — stopped at step 3 of 8 (Professional)',
+      'Draft — stopped at step 3 of 5 (Department)',
     )
   })
 
-  it('says a draft that never left step 1 stopped at Personal', () => {
-    expect(applicationProgress('DRAFT', 1)).toMatch(/step 1 of 8 \(Personal\)/)
+  it('says a draft that never left step 1 stopped at Personal & Profile', () => {
+    expect(applicationProgress('DRAFT', 1)).toMatch(/step 1 of 5 \(Personal & Profile\)/)
   })
 
   it('falls back to step 1 for an out-of-range step rather than crashing', () => {
-    expect(applicationProgress('DRAFT', 99)).toMatch(/step 1 of 8/)
+    expect(applicationProgress('DRAFT', 99)).toMatch(/step 1 of 5/)
   })
 
   it('reports anything past draft simply as submitted', () => {
-    expect(applicationProgress('APPROVED', 8)).toBe('Submitted')
+    expect(applicationProgress('APPROVED', 5)).toBe('Submitted')
   })
 })
