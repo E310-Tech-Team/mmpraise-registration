@@ -4,10 +4,7 @@ import { ProgressSteps } from '@/components/apply/progress-steps'
 import { AvailabilityStep } from '@/components/apply/steps/availability-step'
 import { ChurchStep } from '@/components/apply/steps/church-step'
 import { DepartmentStep } from '@/components/apply/steps/department-step'
-import { LocationStep } from '@/components/apply/steps/location-step'
-import { MotivationStep } from '@/components/apply/steps/motivation-step'
 import { PersonalStep } from '@/components/apply/steps/personal-step'
-import { ProfessionalStep } from '@/components/apply/steps/professional-step'
 import { ReviewStep } from '@/components/apply/steps/review-step'
 import { Alert } from '@/components/ui/primitives'
 import { requireUser } from '@/lib/auth/rbac'
@@ -20,20 +17,17 @@ import {
   getDepartmentsWithLoad,
   getLookupOptions,
 } from '@/lib/reference'
-import { getSettings } from '@/lib/settings'
 import { stepBySlug, WIZARD_STEPS } from '@/lib/validation/registration'
 
 export const metadata: Metadata = { title: 'Volunteer registration' }
 
-/**
- * One page renders every wizard step.
- *
- * Initial values are the persisted record with the autosaved draft layered on
- * top, so a volunteer who refreshes mid-step sees exactly what they had typed —
- * including values that were not yet valid enough to save properly.
- */
 export default async function WizardStepPage({ params }: { params: Promise<{ step: string }> }) {
   const { step: slug } = await params
+
+  // Redirect old steps to their new merged locations
+  if (slug === 'location' || slug === 'professional') redirect('/apply/personal')
+  if (slug === 'motivation') redirect('/apply/department')
+
   const step = stepBySlug(slug)
   if (!step) notFound()
 
@@ -73,7 +67,11 @@ export default async function WizardStepPage({ params }: { params: Promise<{ ste
   async function renderStep() {
     switch (step!.slug) {
       case 'personal': {
-        const countries = await getCountries()
+        const [countries, occupations, educationLevels] = await Promise.all([
+          getCountries(),
+          getLookupOptions('OCCUPATION'),
+          getLookupOptions('EDUCATION'),
+        ])
         const defaultCountry = countries.find((c) => c.iso2 === 'NG') ?? countries[0]
         const phone = profile?.phone ?? ''
         const dialCode = profile?.phoneCountry ?? defaultCountry?.phoneCode ?? ''
@@ -81,6 +79,8 @@ export default async function WizardStepPage({ params }: { params: Promise<{ ste
         return (
           <PersonalStep
             countries={countries}
+            occupations={occupations}
+            educationLevels={educationLevels}
             initialValues={merge(
               {
                 firstName: profile?.firstName ?? '',
@@ -96,50 +96,21 @@ export default async function WizardStepPage({ params }: { params: Promise<{ ste
                 guardianName: profile?.guardianName ?? '',
                 guardianPhone: profile?.guardianPhone ?? '',
                 guardianConsent: profile?.guardianConsent ?? false,
-              },
-              'personal',
-            )}
-          />
-        )
-      }
-
-      case 'location': {
-        const countries = await getCountries()
-        return (
-          <LocationStep
-            countries={countries}
-            initialValues={merge(
-              {
                 countryId: profile?.countryId ?? '',
                 countryHasStates: Boolean(countries.find((c) => c.id === profile?.countryId)?.hasStates),
                 stateId: profile?.stateId ?? null,
                 stateNameOther: profile?.stateNameOther ?? '',
                 city: profile?.city ?? '',
                 addressLine: profile?.addressLine ?? '',
-              },
-              'location',
-            )}
-          />
-        )
-      }
-
-      case 'professional': {
-        const [occupations, educationLevels] = await Promise.all([
-          getLookupOptions('OCCUPATION'),
-          getLookupOptions('EDUCATION'),
-        ])
-        return (
-          <ProfessionalStep
-            occupations={occupations}
-            educationLevels={educationLevels}
-            initialValues={merge(
-              {
                 occupation: profile?.occupation ?? '',
                 occupationOther: profile?.occupationOther ?? '',
                 education: profile?.education ?? '',
                 educationOther: profile?.educationOther ?? '',
+                emergencyName: state.emergency?.name ?? '',
+                emergencyRelationship: state.emergency?.relationship ?? '',
+                emergencyPhone: state.emergency?.phone ?? '',
               },
-              'professional',
+              'personal',
             )}
           />
         )
@@ -156,7 +127,6 @@ export default async function WizardStepPage({ params }: { params: Promise<{ ste
                 churchRegionId: profile?.churchRegionId ?? null,
                 churchProvinceId: profile?.churchProvinceId ?? null,
                 parishId: profile?.parishId ?? null,
-                parishNameOther: profile?.parishNameOther ?? '',
                 churchName: profile?.churchName ?? '',
               },
               'church',
@@ -166,7 +136,10 @@ export default async function WizardStepPage({ params }: { params: Promise<{ ste
       }
 
       case 'department': {
-        const departments = await getDepartmentsWithLoad()
+        const [departments, discoverySources] = await Promise.all([
+          getDepartmentsWithLoad(),
+          getLookupOptions('DISCOVERY_SOURCE'),
+        ])
         const questions = state.participation.departmentId
           ? await getDepartmentQuestions(state.participation.departmentId)
           : []
@@ -174,52 +147,32 @@ export default async function WizardStepPage({ params }: { params: Promise<{ ste
         return (
           <DepartmentStep
             departments={departments}
+            discoverySources={discoverySources}
             initialQuestions={questions}
             initialAnswers={state.answers}
-            initialValues={merge({ departmentId: state.participation.departmentId ?? '' }, 'department')}
-          />
-        )
-      }
-
-      case 'availability': {
-        const settings = await getSettings()
-        const dates = [...new Set(state.availability.map((a) => a.date.toISOString().slice(0, 10)))]
-        const periods = [...new Set(state.availability.map((a) => a.period))]
-
-        return (
-          <AvailabilityStep
-            eventDates={settings.event_dates}
             initialValues={merge(
               {
-                availableDates: dates,
-                preferredPeriods: periods,
-                availableOvernight: state.participation.availableOvernight,
-                emergencyName: state.emergency?.name ?? '',
-                emergencyRelationship: state.emergency?.relationship ?? '',
-                emergencyPhone: state.emergency?.phone ?? '',
-                hasMedicalCondition: state.health ? state.health.hasCondition : null,
-                medicalDetails: state.health?.details ?? '',
-              },
-              'availability',
-            )}
-          />
-        )
-      }
-
-      case 'motivation': {
-        const discoverySources = await getLookupOptions('DISCOVERY_SOURCE')
-        return (
-          <MotivationStep
-            discoverySources={discoverySources}
-            initialValues={merge(
-              {
+                departmentId: state.participation.departmentId ?? '',
                 discoverySource: state.application.discoverySource ?? '',
                 discoveryOther: state.application.discoveryOther ?? '',
                 whyVolunteer: state.application.whyVolunteer ?? '',
                 skillsExperience: state.application.skillsExperience ?? '',
                 additionalInfo: state.application.additionalInfo ?? '',
               },
-              'motivation',
+              'department',
+            )}
+          />
+        )
+      }
+
+      case 'availability': {
+        return (
+          <AvailabilityStep
+            initialValues={merge(
+              {
+                availableForThisYear: state.participation.confirmedAt ? 'YES' : 'YES',
+              },
+              'availability',
             )}
           />
         )

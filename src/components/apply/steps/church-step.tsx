@@ -14,7 +14,6 @@ const LABELS: Record<string, string> = {
   churchRegionId: 'RCCG region',
   churchProvinceId: 'RCCG province',
   parishId: 'Parish',
-  parishNameOther: 'Parish',
   churchName: 'Church name',
 }
 
@@ -47,7 +46,7 @@ export function ChurchStep({
 
   return (
     <StepShell
-      stepNumber={4}
+      stepNumber={2}
       title="Church information"
       description="Everyone is welcome to serve. Church details help us group volunteers for briefings."
       errors={form.errors}
@@ -118,35 +117,18 @@ export function ChurchStep({
                 label="Parish"
                 htmlFor="field-parishId"
                 error={form.errors.parishId}
-                help="Choose from the list, or type your parish name below if it is not there."
+                help="Choose from the list."
               >
                 <Combobox
                   id="field-parishId"
                   options={parishes.map((p) => ({ value: p.id, label: p.name }))}
                   value={form.values.parishId ?? null}
-                  onChange={(value) => form.patch({ parishId: value, parishNameOther: '' })}
+                  onChange={(value) => form.setValue('parishId', value)}
                   placeholder={parishesLoading ? 'Loading…' : 'Search parishes'}
                   loading={parishesLoading}
-                  emptyMessage="No parishes listed — type the name below"
+                  emptyMessage="No parishes listed"
                 />
               </Field>
-
-              {!form.values.parishId && (
-                <Field
-                  label="Parish name"
-                  htmlFor="field-parishNameOther"
-                  required
-                  error={form.errors.parishNameOther}
-                >
-                  <TextInput
-                    id="field-parishNameOther"
-                    maxLength={120}
-                    value={form.values.parishNameOther ?? ''}
-                    onChange={(e) => form.setValue('parishNameOther', e.target.value)}
-                    invalid={Boolean(form.errors.parishNameOther)}
-                  />
-                </Field>
-              )}
             </>
           )}
         </div>

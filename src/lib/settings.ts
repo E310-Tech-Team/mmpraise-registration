@@ -41,14 +41,18 @@ const DEFAULTS: SettingsMap = {
 }
 
 export const getSettings = cache(async (): Promise<SettingsMap> => {
-  const rows = await db.setting.findMany()
-  const map = { ...DEFAULTS }
-  for (const row of rows) {
-    if (row.key in map) {
-      ;(map as Record<string, unknown>)[row.key] = row.value
+  try {
+    const rows = await db.setting.findMany()
+    const map = { ...DEFAULTS }
+    for (const row of rows) {
+      if (row.key in map) {
+        ;(map as Record<string, unknown>)[row.key] = row.value
+      }
     }
+    return map
+  } catch {
+    return { ...DEFAULTS }
   }
-  return map
 })
 
 export async function getSetting<K extends keyof SettingsMap>(key: K): Promise<SettingsMap[K]> {
