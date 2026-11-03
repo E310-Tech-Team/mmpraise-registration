@@ -243,7 +243,7 @@ export default async function DashboardPage({
     isDraft
       ? {
           id: 'continue',
-          label: application ? 'Continue registration' : 'Start registration',
+          label: application ? 'Confirm your availability' : 'Start registration',
           description: 'Pick up at the next unfinished section.',
           icon: <Edit3 className="size-4" />,
           href: `/apply/${nextStepSlug}`,
@@ -714,7 +714,7 @@ function heroActions({ phase, supportHref }: { phase: LifecyclePhase; supportHre
     case 'not_started':
       return { primaryAction: { label: 'Start your registration', href: '/apply' } }
     case 'in_progress':
-      return { primaryAction: { label: 'Continue your registration', href: '/apply' } }
+      return { primaryAction: { label: 'Confirm your availability', href: '/apply' } }
 
     case 'not_accepted':
       return {

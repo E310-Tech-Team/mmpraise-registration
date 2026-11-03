@@ -216,7 +216,7 @@ export function Combobox({
             const isActive = index === activeIndex
             return (
               <li
-                key={option.value}
+                key={`${option.value}-${option.hint ?? index}`}
                 id={`${listId}-${index}`}
                 role="option"
                 aria-selected={isSelected}

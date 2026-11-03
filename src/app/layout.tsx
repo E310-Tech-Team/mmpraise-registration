@@ -41,8 +41,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${afacad.variable} ${figtree.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col bg-surface text-body">
+    <html lang="en" className={`${afacad.variable} ${figtree.variable} h-full antialiased`} suppressHydrationWarning>
+      <body className="flex min-h-full flex-col bg-surface text-body" suppressHydrationWarning>
         <a
           href="#main"
           className="sr-only-focusable absolute left-4 top-4 z-50 rounded-field bg-ink px-4 py-2 text-sm font-semibold text-white"

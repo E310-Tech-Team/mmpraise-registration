@@ -23,17 +23,30 @@ import { cn } from '@/lib/utils'
  * and the first client render agree and there is no hydration mismatch. The
  * figure appears once the client knows the real time.
  */
+let cachedNowMs: number | null = null
+
+function getSnapshot(): number {
+  if (cachedNowMs === null) {
+    cachedNowMs = Date.now()
+  }
+  return cachedNowMs
+}
+
+const getServerSnapshot = (): null => null
+
 function subscribeHourly(onChange: () => void) {
-  const timer = setInterval(onChange, 3_600_000)
+  const timer = setInterval(() => {
+    cachedNowMs = Date.now()
+    onChange()
+  }, 3_600_000)
   return () => clearInterval(timer)
 }
 
 function useDaysUntil(iso: string | null): number | null {
   const nowMs = useSyncExternalStore(
     subscribeHourly,
-    () => Date.now(),
-    // The server has no clock the client can agree with, so it renders nothing.
-    () => null as number | null,
+    getSnapshot,
+    getServerSnapshot,
   )
 
   if (!iso || nowMs === null) return null

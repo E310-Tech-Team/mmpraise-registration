@@ -260,7 +260,7 @@ export default async function HomePage() {
               className="mt-9"
               align="center"
               onDark
-              registerLabel={user ? 'Continue registration' : 'Register to attend'}
+              registerLabel={user ? 'Confirm your availability' : 'Register to attend'}
               itemProps={{ 'data-hero-cta': '' }}
             />
           </div>

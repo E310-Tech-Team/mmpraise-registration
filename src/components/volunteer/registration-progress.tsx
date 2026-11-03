@@ -155,7 +155,7 @@ export function RegistrationProgress({
 
       <div className="mt-6">
         <Link href={`/apply/${nextStepSlug}`} className={buttonClass({ size: 'lg' })}>
-          {started ? 'Continue registration' : 'Start your registration'}
+          {started ? 'Confirm your availability' : 'Start your registration'}
           <ArrowRight aria-hidden className="size-4" />
         </Link>
         <p className="mt-3 text-sm text-muted">
