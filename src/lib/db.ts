@@ -7,7 +7,7 @@ import { PrismaClient } from '@/generated/prisma/client'
  * Next.js hot-reloads modules in development, which would otherwise open a new
  * connection pool on every edit until the database refuses connections.
  */
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; connectionString?: string }
 
 function createClient() {
   const connectionString = process.env.DATABASE_URL
@@ -20,8 +20,14 @@ function createClient() {
   })
 }
 
-export const db = globalForPrisma.prisma ?? createClient()
+export const db =
+  globalForPrisma.prisma && globalForPrisma.connectionString === process.env.DATABASE_URL
+    ? globalForPrisma.prisma
+    : createClient()
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = db
+  globalForPrisma.connectionString = process.env.DATABASE_URL
+}
 
 export * from '@/generated/prisma/enums'

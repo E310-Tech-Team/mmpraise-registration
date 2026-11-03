@@ -15,30 +15,21 @@ export type ReviewSection = { title: string; stepSlug: string; items: ReviewItem
 
 type Consents = {
   consentAccurate: boolean
-  consentTerms: boolean
-  consentDataProcessing: boolean
+  consentTermsAndProcessing: boolean
   consentCommunication: boolean
 }
 
 const CONSENT_COPY: { key: keyof Consents; label: React.ReactNode }[] = [
   { key: 'consentAccurate', label: 'I confirm that the information I have provided is accurate.' },
   {
-    key: 'consentTerms',
+    key: 'consentTermsAndProcessing',
     label: (
       <>
         I agree to the{' '}
         <Link href="/terms" target="_blank" className="font-semibold text-primary underline underline-offset-2">
           MMPraise volunteer terms and code of conduct
         </Link>
-        .
-      </>
-    ),
-  },
-  {
-    key: 'consentDataProcessing',
-    label: (
-      <>
-        I consent to my information being processed for volunteer coordination, as described in the{' '}
+        , and I consent to my information being processed for volunteer coordination, as described in the{' '}
         <Link href="/privacy" target="_blank" className="font-semibold text-primary underline underline-offset-2">
           privacy notice
         </Link>
@@ -54,8 +45,7 @@ export function ReviewStep({ sections }: { sections: ReviewSection[] }) {
   const [pending, startTransition] = useTransition()
   const [consents, setConsents] = useState<Consents>({
     consentAccurate: false,
-    consentTerms: false,
-    consentDataProcessing: false,
+    consentTermsAndProcessing: false,
     consentCommunication: false,
   })
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -65,7 +55,15 @@ export function ReviewStep({ sections }: { sections: ReviewSection[] }) {
     event.preventDefault()
     setFormError(null)
 
-    const parsed = consentSchema.safeParse(consents)
+    const payload = {
+      consentAccurate: consents.consentAccurate,
+      consentTermsAndProcessing: consents.consentTermsAndProcessing,
+      consentTerms: consents.consentTermsAndProcessing,
+      consentDataProcessing: consents.consentTermsAndProcessing,
+      consentCommunication: consents.consentCommunication,
+    }
+
+    const parsed = consentSchema.safeParse(payload)
     if (!parsed.success) {
       const next: FieldErrors = {}
       for (const issue of parsed.error.issues) {
@@ -80,7 +78,7 @@ export function ReviewStep({ sections }: { sections: ReviewSection[] }) {
     setErrors({})
     startTransition(async () => {
       try {
-        const result = await submitApplicationAction(consents)
+        const result = await submitApplicationAction(payload)
         if (!result.ok) {
           setFormError(result.error)
           requestAnimationFrame(() => document.getElementById('step-errors')?.focus())
@@ -140,7 +138,7 @@ export function ReviewStep({ sections }: { sections: ReviewSection[] }) {
       </Card>
 
       <Card>
-        <CardHeader title="Consent" description="All four are required to submit your registration." />
+        <CardHeader title="Consent" description="Please review and agree to complete your registration." />
         <CardBody className="space-y-3">
           {CONSENT_COPY.map((consent) => (
             <div key={consent.key} id={`field-${consent.key}`}>
