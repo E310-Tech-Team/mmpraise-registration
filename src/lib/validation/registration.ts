@@ -43,7 +43,7 @@ export const SHIFT_PERIODS = [
   { value: 'OVERNIGHT', label: 'Overnight', hint: '00:00 – 06:00' },
 ] as const
 
-// --- Step 1: personal -----------------------------------------------------
+// --- Step 1: personal, location & professional ----------------------------
 
 export const personalSchema = z
   .object({
@@ -63,35 +63,69 @@ export const personalSchema = z
     guardianName: z.string().optional().nullable(),
     guardianPhone: z.string().optional().nullable(),
     guardianConsent: z.boolean().default(false),
+
+    // Location fields (merged into Step 1)
+    countryId: z.string().min(1, 'Select your country'),
+    countryHasStates: z.boolean().default(false),
+    stateId: z.string().nullable().optional(),
+    stateNameOther: z.string().optional().nullable(),
+    city: trimmedText(80).pipe(z.string().min(2, 'Enter your city or town')),
+    addressLine: z.string().optional().nullable(),
+
+    // Professional & educational fields (merged into Step 1)
+    occupation: z.string().min(1, 'Select your occupation'),
+    occupationOther: z.string().optional().nullable(),
+    education: z.string().min(1, 'Select your highest qualification'),
+    educationOther: z.string().optional().nullable(),
+
+    // Emergency contact fields (moved to Step 1, without country code)
+    emergencyName: nameSchema,
+    emergencyRelationship: trimmedText(60).pipe(z.string().min(2, 'Enter the relationship')),
+    emergencyPhone: z.string().min(5, 'Enter emergency contact phone number'),
   })
   .superRefine((data, ctx) => {
     const minor = ALWAYS_MINOR_RANGES.includes(data.ageRange) || data.isMinor === true
 
-    // The 16–20 band straddles the age of majority, so an explicit answer is
-    // required — defaulting it either way would misclassify a safeguarding case.
     if (ASK_IF_MINOR_RANGES.includes(data.ageRange) && data.isMinor === null) {
       ctx.addIssue({ code: 'custom', path: ['isMinor'], message: 'Tell us whether you are under 18' })
     }
 
-    if (!minor) return
+    if (minor) {
+      if (!data.guardianName || data.guardianName.trim().length < 2) {
+        ctx.addIssue({ code: 'custom', path: ['guardianName'], message: "Enter your parent or guardian's full name" })
+      }
+      if (!data.guardianPhone || !/^\+[1-9]\d{7,14}$/.test(data.guardianPhone.replace(/[\s()-]/g, ''))) {
+        ctx.addIssue({ code: 'custom', path: ['guardianPhone'], message: "Enter your parent or guardian's phone number" })
+      }
+      if (!data.guardianConsent) {
+        ctx.addIssue({ code: 'custom', path: ['guardianConsent'], message: 'Parental or guardian consent is required for volunteers under 18' })
+      }
+    }
 
-    if (!data.guardianName || data.guardianName.trim().length < 2) {
-      ctx.addIssue({ code: 'custom', path: ['guardianName'], message: "Enter your parent or guardian's full name" })
+    if (data.countryHasStates) {
+      if (!data.stateId) {
+        ctx.addIssue({ code: 'custom', path: ['stateId'], message: 'Select your state or province' })
+      }
+    } else if (!data.stateNameOther || data.stateNameOther.trim().length < 2) {
+      ctx.addIssue({ code: 'custom', path: ['stateNameOther'], message: 'Enter your state, province or region' })
     }
-    if (!data.guardianPhone || !/^\+[1-9]\d{7,14}$/.test(data.guardianPhone.replace(/[\s()-]/g, ''))) {
-      ctx.addIssue({ code: 'custom', path: ['guardianPhone'], message: "Enter your parent or guardian's phone number" })
+
+    if (data.addressLine && data.addressLine.length > 200) {
+      ctx.addIssue({ code: 'custom', path: ['addressLine'], message: 'Must be 200 characters or fewer' })
     }
-    if (!data.guardianConsent) {
-      ctx.addIssue({ code: 'custom', path: ['guardianConsent'], message: 'Parental or guardian consent is required for volunteers under 18' })
+
+    if (data.occupation === 'other' && !data.occupationOther?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['occupationOther'], message: 'Please specify your occupation' })
+    }
+    if (data.education === 'other' && !data.educationOther?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['educationOther'], message: 'Please specify your qualification' })
     }
   })
 
-// --- Step 2: location -----------------------------------------------------
-
+// Standalone location and professional schemas retained for legacy helpers
 export const locationSchema = z
   .object({
     countryId: z.string().min(1, 'Select your country'),
-    /** Set when the selected country has states in our reference data. */
     countryHasStates: z.boolean().default(false),
     stateId: z.string().nullable().optional(),
     stateNameOther: z.string().optional().nullable(),
@@ -106,13 +140,10 @@ export const locationSchema = z
     } else if (!data.stateNameOther || data.stateNameOther.trim().length < 2) {
       ctx.addIssue({ code: 'custom', path: ['stateNameOther'], message: 'Enter your state, province or region' })
     }
-
     if (data.addressLine && data.addressLine.length > 200) {
       ctx.addIssue({ code: 'custom', path: ['addressLine'], message: 'Must be 200 characters or fewer' })
     }
   })
-
-// --- Step 3: professional & educational -----------------------------------
 
 export const professionalSchema = z
   .object({
@@ -130,7 +161,7 @@ export const professionalSchema = z
     }
   })
 
-// --- Step 4: church -------------------------------------------------------
+// --- Step 2: church (optional parish removed) -----------------------------
 
 export const churchSchema = z
   .object({
@@ -138,7 +169,6 @@ export const churchSchema = z
     churchRegionId: z.string().nullable().optional(),
     churchProvinceId: z.string().nullable().optional(),
     parishId: z.string().nullable().optional(),
-    parishNameOther: z.string().optional().nullable(),
     churchName: z.string().optional().nullable(),
   })
   .superRefine((data, ctx) => {
@@ -149,63 +179,35 @@ export const churchSchema = z
       if (!data.churchProvinceId) {
         ctx.addIssue({ code: 'custom', path: ['churchProvinceId'], message: 'Select your RCCG province' })
       }
-      if (!data.parishId && !data.parishNameOther?.trim()) {
-        ctx.addIssue({ code: 'custom', path: ['parishNameOther'], message: 'Select or enter your parish' })
-      }
     }
 
     if (data.denomination === 'OTHER_CHRISTIAN' && !data.churchName?.trim()) {
       ctx.addIssue({ code: 'custom', path: ['churchName'], message: 'Enter the name of your church' })
     }
-
-    // Non-Christian applicants are never asked for church details.
   })
 
-// --- Step 5: department ---------------------------------------------------
+// --- Step 3: department (merged with motivation) --------------------------
 
-export const departmentSchema = z.object({
-  departmentId: z.string().min(1, 'Select the department you would like to serve in'),
-})
-
-// --- Step 6: availability & health ----------------------------------------
-
-export const availabilitySchema = z
+export const departmentSchema = z
   .object({
-    availableDates: z.array(z.string()).default([]),
-    preferredPeriods: z.array(z.enum(['MORNING', 'AFTERNOON', 'EVENING', 'OVERNIGHT'])).default([]),
-    availableOvernight: z.boolean().nullable().default(null),
-    emergencyName: nameSchema,
-    emergencyRelationship: trimmedText(60).pipe(z.string().min(2, 'Enter the relationship')),
-    emergencyPhone: phoneSchema,
-    hasMedicalCondition: z.boolean().nullable().default(null),
-    medicalDetails: z.string().optional().nullable(),
+    departmentId: z.string().min(1, 'Select the department you would like to serve in'),
+    discoverySource: z.string().min(1, 'Tell us how you heard about MMPraise volunteering'),
+    discoveryOther: z.string().optional().nullable(),
+    whyVolunteer: multilineText(1000).pipe(z.string().min(10, 'Please tell us a little more (at least 10 characters)')),
+    skillsExperience: z.string().optional().nullable(),
+    additionalInfo: z.string().optional().nullable(),
   })
   .superRefine((data, ctx) => {
-    if (data.availableDates.length === 0) {
-      ctx.addIssue({ code: 'custom', path: ['availableDates'], message: 'Select at least one date you can serve' })
+    if (data.discoverySource === 'other' && !data.discoveryOther?.trim()) {
+      ctx.addIssue({ code: 'custom', path: ['discoveryOther'], message: 'Please tell us where you heard about us' })
     }
-    if (data.preferredPeriods.length === 0) {
-      ctx.addIssue({ code: 'custom', path: ['preferredPeriods'], message: 'Select at least one preferred shift' })
+    if ((data.skillsExperience?.length ?? 0) > 1000) {
+      ctx.addIssue({ code: 'custom', path: ['skillsExperience'], message: 'Must be 1000 characters or fewer' })
     }
-    if (data.availableOvernight === null) {
-      ctx.addIssue({ code: 'custom', path: ['availableOvernight'], message: 'Tell us whether you can serve overnight' })
-    }
-    if (data.hasMedicalCondition === null) {
-      ctx.addIssue({ code: 'custom', path: ['hasMedicalCondition'], message: 'Select yes or no' })
-    }
-    if (data.hasMedicalCondition && !data.medicalDetails?.trim()) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['medicalDetails'],
-        message: 'Share only what the volunteer coordinator needs to keep you safe',
-      })
-    }
-    if ((data.medicalDetails?.length ?? 0) > 1000) {
-      ctx.addIssue({ code: 'custom', path: ['medicalDetails'], message: 'Must be 1000 characters or fewer' })
+    if ((data.additionalInfo?.length ?? 0) > 1000) {
+      ctx.addIssue({ code: 'custom', path: ['additionalInfo'], message: 'Must be 1000 characters or fewer' })
     }
   })
-
-// --- Step 7: discovery & motivation ---------------------------------------
 
 export const discoverySchema = z
   .object({
@@ -227,14 +229,24 @@ export const discoverySchema = z
     }
   })
 
-// --- Step 8: consent & submit ---------------------------------------------
+// --- Step 4: availability (last step before review) -----------------------
 
-export const consentSchema = z.object({
-  consentAccurate: z.literal(true, { message: 'Please confirm your information is accurate' }),
-  consentTerms: z.literal(true, { message: 'Please accept the volunteer terms and code of conduct' }),
-  consentDataProcessing: z.literal(true, { message: 'Please consent to your information being processed' }),
-  consentCommunication: z.literal(true, { message: 'Please consent to registration communication' }),
+export const availabilitySchema = z.object({
+  availableForThisYear: z.enum(['YES', 'NO'], { message: "Please confirm whether you will be available for this year's edition" }),
 })
+
+// --- Step 5: consent & submit (consents 2 & 3 merged) ---------------------
+
+export const consentSchema = z
+  .object({
+    consentAccurate: z.literal(true, { message: 'Please confirm your information is accurate' }),
+    consentTermsAndProcessing: z.literal(true, {
+      message: 'Please accept the volunteer terms and data processing consent',
+    }),
+    consentCommunication: z.literal(true, { message: 'Please consent to registration communication' }),
+    consentTerms: z.boolean().optional(),
+    consentDataProcessing: z.boolean().optional(),
+  })
 
 export type PersonalInput = z.input<typeof personalSchema>
 export type LocationInput = z.input<typeof locationSchema>
@@ -248,17 +260,18 @@ export type ConsentInput = z.input<typeof consentSchema>
 // --- Wizard step registry -------------------------------------------------
 
 export const WIZARD_STEPS = [
-  { slug: 'personal', number: 1, title: 'Personal', description: 'Your details and photo' },
-  { slug: 'location', number: 2, title: 'Location', description: 'Where you are based' },
-  { slug: 'professional', number: 3, title: 'Professional', description: 'Work and education' },
-  { slug: 'church', number: 4, title: 'Church', description: 'Your church information' },
-  { slug: 'department', number: 5, title: 'Department', description: 'Where you want to serve' },
-  { slug: 'availability', number: 6, title: 'Availability', description: 'Dates, shifts and safety' },
-  { slug: 'motivation', number: 7, title: 'Motivation', description: 'Why you want to serve' },
-  { slug: 'review', number: 8, title: 'Review', description: 'Check and submit' },
+  { slug: 'personal', number: 1, title: 'Personal & Profile', description: 'Personal, location & profession' },
+  { slug: 'church', number: 2, title: 'Church', description: 'Your church background' },
+  { slug: 'department', number: 3, title: 'Department', description: 'Where and why you want to serve' },
+  { slug: 'availability', number: 4, title: 'Availability', description: 'Confirm your availability' },
+  { slug: 'review', number: 5, title: 'Review', description: 'Check and submit' },
 ] as const
 
-export type WizardStepSlug = (typeof WIZARD_STEPS)[number]['slug']
+export type WizardStepSlug =
+  | (typeof WIZARD_STEPS)[number]['slug']
+  | 'location'
+  | 'professional'
+  | 'motivation'
 
 export const STEP_SLUGS = WIZARD_STEPS.map((s) => s.slug) as unknown as [WizardStepSlug, ...WizardStepSlug[]]
 
@@ -271,11 +284,6 @@ export function stepByNumber(number: number) {
 }
 
 // --- Form value types -----------------------------------------------------
-//
-// The Zod schemas narrow enum fields to their literal unions, which is correct
-// for validated output but cannot represent "nothing chosen yet". The wizard
-// therefore holds its state in these looser types and lets the schema reject an
-// empty value with a proper message.
 
 export type PersonalFormValues = {
   firstName: string
@@ -291,6 +299,25 @@ export type PersonalFormValues = {
   guardianName: string
   guardianPhone: string
   guardianConsent: boolean
+
+  // Location fields
+  countryId: string
+  countryHasStates: boolean
+  stateId: string | null
+  stateNameOther: string
+  city: string
+  addressLine: string
+
+  // Professional fields
+  occupation: string
+  occupationOther: string
+  education: string
+  educationOther: string
+
+  // Emergency contact fields (without country code)
+  emergencyName: string
+  emergencyRelationship: string
+  emergencyPhone: string
 }
 
 export type LocationFormValues = {
@@ -314,23 +341,29 @@ export type ChurchFormValues = {
   churchRegionId: string | null
   churchProvinceId: string | null
   parishId: string | null
-  parishNameOther: string
+  parishNameOther?: string
   churchName: string
 }
 
 export type DepartmentFormValues = {
   departmentId: string
+  discoverySource: string
+  discoveryOther: string
+  whyVolunteer: string
+  skillsExperience: string
+  additionalInfo: string
 }
 
 export type AvailabilityFormValues = {
-  availableDates: string[]
-  preferredPeriods: string[]
-  availableOvernight: boolean | null
-  emergencyName: string
-  emergencyRelationship: string
-  emergencyPhone: string
-  hasMedicalCondition: boolean | null
-  medicalDetails: string
+  availableForThisYear: 'YES' | 'NO' | ''
+  availableDates?: string[]
+  preferredPeriods?: string[]
+  availableOvernight?: boolean | null
+  emergencyName?: string
+  emergencyRelationship?: string
+  emergencyPhone?: string
+  hasMedicalCondition?: boolean | null
+  medicalDetails?: string
 }
 
 export type MotivationFormValues = {

@@ -90,39 +90,43 @@ export const getSessionUser = cache(async (): Promise<SessionUser | null> => {
   const token = jar.get(COOKIE)?.value
   if (!token) return null
 
-  const session = await db.session.findUnique({
-    where: { tokenHash: hashToken(token) },
-    include: {
-      user: {
-        include: {
-          roles: true,
-          departmentScopes: { select: { departmentId: true } },
-          permissionGrants: { select: { permission: true, granted: true } },
-          profile: { select: { firstName: true, lastName: true, photoDocumentId: true } },
+  try {
+    const session = await db.session.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: {
+        user: {
+          include: {
+            roles: true,
+            departmentScopes: { select: { departmentId: true } },
+            permissionGrants: { select: { permission: true, granted: true } },
+            profile: { select: { firstName: true, lastName: true, photoDocumentId: true } },
+          },
         },
       },
-    },
-  })
+    })
 
-  if (!session || session.revokedAt || session.expiresAt < new Date()) return null
-  if (!session.user.isActive) return null
+    if (!session || session.revokedAt || session.expiresAt < new Date()) return null
+    if (!session.user.isActive) return null
 
-  return {
-    id: session.user.id,
-    email: session.user.email,
-    username: session.user.username,
-    roles: session.user.roles.map((r) => r.role),
-    emailVerified: Boolean(session.user.emailVerifiedAt),
-    departmentScopes: session.user.departmentScopes.map((s) => s.departmentId),
-    firstName: session.user.profile?.firstName ?? null,
-    lastName: session.user.profile?.lastName ?? null,
-    photoDocumentId: session.user.profile?.photoDocumentId ?? null,
-    permissionOverrides: session.user.permissionGrants.map((g) => ({
-      permission: g.permission,
-      granted: g.granted,
-    })),
-    adminDisabledAt: session.user.adminDisabledAt,
-    adminSuspendedUntil: session.user.adminSuspendedUntil,
+    return {
+      id: session.user.id,
+      email: session.user.email,
+      username: session.user.username,
+      roles: session.user.roles.map((r) => r.role),
+      emailVerified: Boolean(session.user.emailVerifiedAt),
+      departmentScopes: session.user.departmentScopes.map((s) => s.departmentId),
+      firstName: session.user.profile?.firstName ?? null,
+      lastName: session.user.profile?.lastName ?? null,
+      photoDocumentId: session.user.profile?.photoDocumentId ?? null,
+      permissionOverrides: session.user.permissionGrants.map((g) => ({
+        permission: g.permission,
+        granted: g.granted,
+      })),
+      adminDisabledAt: session.user.adminDisabledAt,
+      adminSuspendedUntil: session.user.adminSuspendedUntil,
+    }
+  } catch {
+    return null
   }
 })
 

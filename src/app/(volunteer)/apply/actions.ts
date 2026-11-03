@@ -84,6 +84,19 @@ export async function savePersonalAction(values: unknown): Promise<ActionResult>
     }
   }
 
+  // Location country check
+  const country = await db.country.findUnique({ where: { id: data.countryId }, select: { id: true, hasStates: true } })
+  if (!country) return fail('Select a valid country', { countryId: 'Select a valid country' })
+
+  if (country.hasStates && data.stateId) {
+    const state = await db.state.findFirst({ where: { id: data.stateId, countryId: country.id }, select: { id: true } })
+    if (!state) return fail('Select a valid state', { stateId: 'Select a state that belongs to your country' })
+  }
+
+  if (country.hasStates && !data.stateId) {
+    return fail('Select your state or province', { stateId: 'Select your state or province' })
+  }
+
   try {
     await db.$transaction(async (tx) => {
       await tx.user.update({
@@ -108,10 +121,17 @@ export async function savePersonalAction(values: unknown): Promise<ActionResult>
           guardianPhone: data.guardianPhone ?? null,
           guardianConsent: data.guardianConsent,
           photoDocumentId: data.photoDocumentId ?? null,
+          countryId: country.id,
+          stateId: country.hasStates ? data.stateId : null,
+          stateNameOther: country.hasStates ? null : (data.stateNameOther ?? null),
+          city: data.city,
+          addressLine: data.addressLine ?? null,
+          occupation: data.occupation,
+          occupationOther: data.occupation === 'other' ? (data.occupationOther ?? null) : null,
+          education: data.education,
+          educationOther: data.education === 'other' ? (data.educationOther ?? null) : null,
         },
         create: {
-          // Prisma requires the relation, not the raw foreign key, when
-          // creating a record whose owner is mandatory.
           user: { connect: { id: user.id } },
           firstName: data.firstName,
           lastName: data.lastName,
@@ -123,9 +143,32 @@ export async function savePersonalAction(values: unknown): Promise<ActionResult>
           guardianName: data.guardianName ?? null,
           guardianPhone: data.guardianPhone ?? null,
           guardianConsent: data.guardianConsent,
-          // Relation fields must be connected, not set by foreign key, in a
-          // checked create input.
           photo: data.photoDocumentId ? { connect: { id: data.photoDocumentId } } : undefined,
+          country: { connect: { id: country.id } },
+          state: country.hasStates && data.stateId ? { connect: { id: data.stateId } } : undefined,
+          stateNameOther: country.hasStates ? null : (data.stateNameOther ?? null),
+          city: data.city,
+          addressLine: data.addressLine ?? null,
+          occupation: data.occupation,
+          occupationOther: data.occupation === 'other' ? (data.occupationOther ?? null) : null,
+          education: data.education,
+          educationOther: data.education === 'other' ? (data.educationOther ?? null) : null,
+        },
+      })
+
+      // Emergency contact (moved to Personal step, without country code)
+      await tx.emergencyContact.upsert({
+        where: { applicationId: application.id },
+        update: {
+          name: data.emergencyName,
+          relationship: data.emergencyRelationship,
+          phone: data.emergencyPhone,
+        },
+        create: {
+          applicationId: application.id,
+          name: data.emergencyName,
+          relationship: data.emergencyRelationship,
+          phone: data.emergencyPhone,
         },
       })
     })
@@ -218,13 +261,12 @@ export async function saveChurchAction(values: unknown): Promise<ActionResult> {
       churchRegionId: isRccg ? (data.churchRegionId ?? null) : null,
       churchProvinceId: isRccg ? (data.churchProvinceId ?? null) : null,
       parishId: isRccg ? (data.parishId ?? null) : null,
-      parishNameOther: isRccg ? (data.parishNameOther ?? null) : null,
-      // Non-Christian applicants are not asked for a church name at all.
+      parishNameOther: null,
       churchName: data.denomination === 'OTHER_CHRISTIAN' ? (data.churchName ?? null) : null,
     },
   })
 
-  await advance(application.id, 4)
+  await advance(application.id, 2)
   return ok()
 }
 
@@ -232,21 +274,13 @@ export async function saveDepartmentAction(values: unknown, answers: AnswerMap):
   const { application } = await requireEditableApplication()
   const parsed = parseOrFail(departmentSchema, values)
   if (!parsed.ok) return parsed.result
+  const data = parsed.data
 
   const department = await db.department.findFirst({
-    where: { id: parsed.data.departmentId, isActive: true },
+    where: { id: data.departmentId, isActive: true },
     select: { id: true, name: true },
   })
   if (!department) return fail('Select a valid department', { departmentId: 'Select a valid department' })
-
-  /*
-   * No capacity check.
-   *
-   * There is no fixed limit on the number of volunteers a department needs, so
-   * nothing here may refuse an application because a count has been reached.
-   * This used to turn people away with "{Department} has reached its volunteer
-   * capacity" — a rule the organisation does not have.
-   */
 
   const questions = await getDepartmentQuestions(department.id)
   const answerErrors = validateAnswers(questions, answers)
@@ -256,15 +290,26 @@ export async function saveDepartmentAction(values: unknown, answers: AnswerMap):
     return fail('Please answer the department questions', fieldErrors)
   }
 
-  // The department is a choice for *this* edition; a volunteer may serve
-  // somewhere else next time without disturbing what they did before.
   const participation = await getOrCreateParticipation(application.id)
   await db.editionParticipation.update({
     where: { id: participation.id },
     data: { departmentId: department.id },
   })
   await persistAnswers(participation.id, questions, answers)
-  await advance(application.id, 5)
+
+  // Save merged motivation questions directly on application
+  await db.volunteerApplication.update({
+    where: { id: application.id },
+    data: {
+      discoverySource: data.discoverySource,
+      discoveryOther: data.discoverySource === 'other' ? (data.discoveryOther ?? null) : null,
+      whyVolunteer: data.whyVolunteer,
+      skillsExperience: data.skillsExperience ?? null,
+      additionalInfo: data.additionalInfo ?? null,
+    },
+  })
+
+  await advance(application.id, 3)
   return ok()
 }
 
@@ -274,60 +319,19 @@ export async function saveAvailabilityAction(values: unknown): Promise<ActionRes
   if (!parsed.ok) return parsed.result
   const data = parsed.data
 
-  const settings = await getSettings()
-  const allowedDates = new Set(settings.event_dates)
-  const dates = data.availableDates.filter((d) => allowedDates.size === 0 || allowedDates.has(d))
-  if (dates.length === 0) {
-    return fail('Select at least one valid date', { availableDates: 'Select at least one date you can serve' })
+  if (data.availableForThisYear === 'NO') {
+    return fail("You must be available to take part in this year's edition", {
+      availableForThisYear: "Please confirm that you will be available for this year's edition",
+    })
   }
 
   const participation = await getOrCreateParticipation(application.id)
-
-  await db.$transaction(async (tx) => {
-    await tx.volunteerAvailability.deleteMany({ where: { participationId: participation.id } })
-    for (const date of dates) {
-      for (const period of data.preferredPeriods) {
-        await tx.volunteerAvailability.create({
-          data: { participationId: participation.id, date: new Date(`${date}T00:00:00.000Z`), period },
-        })
-      }
-    }
-
-    await tx.emergencyContact.upsert({
-      where: { applicationId: application.id },
-      update: {
-        name: data.emergencyName,
-        relationship: data.emergencyRelationship,
-        phone: data.emergencyPhone,
-      },
-      create: {
-        applicationId: application.id,
-        name: data.emergencyName,
-        relationship: data.emergencyRelationship,
-        phone: data.emergencyPhone,
-      },
-    })
-
-    await tx.applicationHealthInfo.upsert({
-      where: { applicationId: application.id },
-      update: {
-        hasCondition: Boolean(data.hasMedicalCondition),
-        details: data.hasMedicalCondition ? (data.medicalDetails ?? null) : null,
-      },
-      create: {
-        applicationId: application.id,
-        hasCondition: Boolean(data.hasMedicalCondition),
-        details: data.hasMedicalCondition ? (data.medicalDetails ?? null) : null,
-      },
-    })
-
-    await tx.editionParticipation.update({
-      where: { id: participation.id },
-      data: { availableOvernight: data.availableOvernight },
-    })
+  await db.editionParticipation.update({
+    where: { id: participation.id },
+    data: { confirmedAt: new Date() },
   })
 
-  await advance(application.id, 6)
+  await advance(application.id, 4)
   return ok()
 }
 
@@ -433,18 +437,14 @@ export async function submitApplicationAction(values: unknown): Promise<ActionRe
     return fail('This application has already been submitted', undefined, 'already_submitted')
   }
 
-  // Re-validate every step server-side. The wizard should have caught all of
-  // this, but a submission must never rely on the client having done so.
+  // Re-validate every step server-side.
   const problems: string[] = []
-  if (!profile?.firstName || !profile.lastName || !profile.gender || !profile.ageRange || !profile.phone) {
+  if (!profile?.firstName || !profile.lastName || !profile.gender || !profile.ageRange || !profile.phone || !profile?.countryId || !profile?.city || !profile?.occupation || !profile?.education || !state.emergency) {
     problems.push('personal')
   }
-  if (!profile?.countryId || !profile.city) problems.push('location')
-  if (!profile?.occupation || !profile.education) problems.push('professional')
   if (!profile?.denomination) problems.push('church')
-  if (!participation.departmentId) problems.push('department')
-  if (!state.emergency || state.availability.length === 0) problems.push('availability')
-  if (!application.whyVolunteer || !application.discoverySource) problems.push('motivation')
+  if (!participation.departmentId || !application.whyVolunteer || !application.discoverySource) problems.push('department')
+  if (!participation.confirmedAt) problems.push('availability')
 
   if (problems.length > 0) {
     return fail(
@@ -472,7 +472,7 @@ export async function submitApplicationAction(values: unknown): Promise<ActionRe
       submissionIp: clientIp(headerList),
       submissionUserAgent: headerList.get('user-agent')?.slice(0, 500) ?? null,
       draftData: undefined,
-      currentStep: 8,
+      currentStep: 5,
     },
   })
 

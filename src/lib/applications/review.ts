@@ -43,7 +43,7 @@ export async function buildReviewSections(state: WizardState): Promise<ReviewSec
   const sections: ReviewSection[] = []
 
   sections.push({
-    title: 'Personal information',
+    title: 'Personal, location & profession',
     stepSlug: 'personal',
     items: [
       { label: 'Name', value: profile ? `${profile.firstName} ${profile.lastName}` : '—' },
@@ -59,24 +59,10 @@ export async function buildReviewSections(state: WizardState): Promise<ReviewSec
             { label: 'Guardian consent', value: profile.guardianConsent ? 'Given' : 'Not given' },
           ]
         : []),
-    ],
-  })
-
-  sections.push({
-    title: 'Location',
-    stepSlug: 'location',
-    items: [
       { label: 'Country', value: country?.name ?? '—' },
       { label: 'State or province', value: state_?.name ?? profile?.stateNameOther ?? '—' },
       { label: 'City or town', value: profile?.city ?? '—' },
       { label: 'Residential address', value: profile?.addressLine ?? 'Not provided' },
-    ],
-  })
-
-  sections.push({
-    title: 'Professional and educational',
-    stepSlug: 'professional',
-    items: [
       {
         label: 'Occupation',
         value: profile?.occupation === 'other' ? (profile.occupationOther ?? 'Other') : label(occupations, profile?.occupation),
@@ -85,6 +71,8 @@ export async function buildReviewSections(state: WizardState): Promise<ReviewSec
         label: 'Educational qualification',
         value: profile?.education === 'other' ? (profile.educationOther ?? 'Other') : label(educations, profile?.education),
       },
+      { label: 'Emergency contact', value: emergency ? `${emergency.name} (${emergency.relationship})` : '—' },
+      { label: 'Emergency phone', value: emergency?.phone ?? '—' },
     ],
   })
 
@@ -98,7 +86,7 @@ export async function buildReviewSections(state: WizardState): Promise<ReviewSec
             { label: 'Denomination', value: denominationLabel },
             { label: 'Region', value: region?.name ?? '—' },
             { label: 'Province', value: province?.name ?? '—' },
-            { label: 'Parish', value: parish?.name ?? profile.parishNameOther ?? '—' },
+            { label: 'Parish', value: parish?.name ?? '—' },
           ]
         : profile?.denomination === 'OTHER_CHRISTIAN'
           ? [
@@ -108,65 +96,38 @@ export async function buildReviewSections(state: WizardState): Promise<ReviewSec
           : [{ label: 'Denomination', value: denominationLabel }],
   })
 
-  // Department answers, rendered from the question definitions.
-  const questionItems: ReviewSection['items'] = [{ label: 'Department', value: department?.name ?? '—' }]
+  // Department answers, rendered from the question definitions + motivation
+  const departmentItems: ReviewSection['items'] = [{ label: 'Department', value: department?.name ?? '—' }]
   if (department) {
     const questions = await getDepartmentQuestions(department.id)
     for (const question of questions) {
       const answer = answers[question.key]
       if (!answer) continue
-      questionItems.push({ label: question.label, value: formatAnswer(question, answer) })
+      departmentItems.push({ label: question.label, value: formatAnswer(question, answer) })
     }
   }
-  sections.push({ title: 'Volunteer department', stepSlug: 'department', items: questionItems })
-
-  const dates = [...new Set(availability.map((a) => a.date.toISOString().slice(0, 10)))].sort()
-  const periods = [...new Set(availability.map((a) => a.period))]
+  departmentItems.push(
+    {
+      label: 'How you heard about us',
+      value:
+        application.discoverySource === 'other'
+          ? (application.discoveryOther ?? 'Other')
+          : label(discoveries, application.discoverySource),
+    },
+    { label: 'Why you want to volunteer', value: application.whyVolunteer ?? '—' },
+    { label: 'Relevant skills or experience', value: application.skillsExperience ?? 'Not provided' },
+    { label: 'Additional information', value: application.additionalInfo ?? 'Not provided' },
+  )
+  sections.push({ title: 'Department & motivation', stepSlug: 'department', items: departmentItems })
 
   sections.push({
-    title: 'Availability and emergency contact',
+    title: 'Availability',
     stepSlug: 'availability',
     items: [
-      { label: 'Available dates', value: dates.length ? dates.map((d) => formatDate(d)).join(', ') : '—' },
       {
-        label: 'Preferred shifts',
-        value: periods.length
-          ? periods.map((p) => SHIFT_PERIODS.find((s) => s.value === p)?.label ?? p).join(', ')
-          : '—',
+        label: "Available for this year's edition",
+        value: participation.confirmedAt ? 'Yes' : 'Yes',
       },
-      {
-        label: 'Available overnight',
-        value:
-          participation.availableOvernight === null
-            ? '—'
-            : participation.availableOvernight
-              ? 'Yes'
-              : 'No',
-      },
-      { label: 'Emergency contact', value: emergency ? `${emergency.name} (${emergency.relationship})` : '—' },
-      { label: 'Emergency phone', value: emergency?.phone ?? '—' },
-      {
-        label: 'Medical condition declared',
-        value: health?.hasCondition ? 'Yes — details shared privately with the medical team' : 'No',
-        sensitive: true,
-      },
-    ],
-  })
-
-  sections.push({
-    title: 'Discovery and motivation',
-    stepSlug: 'motivation',
-    items: [
-      {
-        label: 'How you heard about us',
-        value:
-          application.discoverySource === 'other'
-            ? (application.discoveryOther ?? 'Other')
-            : label(discoveries, application.discoverySource),
-      },
-      { label: 'Why you want to volunteer', value: application.whyVolunteer ?? '—' },
-      { label: 'Relevant skills or experience', value: application.skillsExperience ?? 'Not provided' },
-      { label: 'Additional information', value: application.additionalInfo ?? 'Not provided' },
     ],
   })
 

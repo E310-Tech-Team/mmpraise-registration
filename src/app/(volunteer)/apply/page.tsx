@@ -15,6 +15,6 @@ export default async function ApplyPage() {
     redirect(participation.confirmedAt ? '/dashboard' : '/participate')
   }
 
-  const step = stepByNumber(Math.min(Math.max(application.currentStep, 1), 8))
+  const step = stepByNumber(Math.min(Math.max(application.currentStep, 1), 5))
   redirect(`/apply/${step.slug}`)
 }
