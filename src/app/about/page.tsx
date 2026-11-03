@@ -539,7 +539,6 @@ export default async function AboutPage() {
 
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
               <VolunteerCta />
-              <RegisterCta onDark />
               {/* Both are behind launch flags; each appears only once live. */}
               {links.livestream && (
                 <Link

@@ -110,7 +110,7 @@ export const eventConfig = {
 export const links = {
   // Always live: registration cannot receive applications without these.
   register: env('NEXT_PUBLIC_REGISTRATION_URL', '/register'),
-  volunteer: env('NEXT_PUBLIC_VOLUNTEER_URL', '/register'),
+  volunteer: env('NEXT_PUBLIC_VOLUNTEER_URL', '/login'),
   shareTestimony: '/#share-testimony',
 
   // Gated behind launch flags.

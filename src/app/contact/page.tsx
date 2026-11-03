@@ -539,7 +539,6 @@ export default async function ContactPage() {
 
             <div className="mt-9 flex flex-col justify-center gap-3 sm:flex-row">
               <VolunteerCta />
-              <RegisterCta onDark />
               {links.livestream && (
                 <Link
                   href={links.livestream}

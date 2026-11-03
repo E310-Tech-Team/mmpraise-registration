@@ -92,7 +92,6 @@ export function PhotoUpload({
             id="field-photoDocumentId"
             type="file"
             accept={ACCEPT}
-            capture="user"
             className="sr-only"
             aria-describedby={describedById}
             onChange={(event) => handleFile(event.target.files?.[0])}

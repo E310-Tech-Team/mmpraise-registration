@@ -76,6 +76,7 @@ export function CtaPair({
   className,
   volunteerLabel,
   registerLabel,
+  showRegister = false,
   itemProps,
 }: {
   onDark?: boolean
@@ -84,6 +85,7 @@ export function CtaPair({
   className?: string
   volunteerLabel?: string
   registerLabel?: string
+  showRegister?: boolean
   /** Applied to each button — used by the hero timeline to target them. */
   itemProps?: Record<string, string>
 }) {
@@ -96,7 +98,7 @@ export function CtaPair({
       )}
     >
       <VolunteerCta size={size} label={volunteerLabel} {...itemProps} />
-      <RegisterCta size={size} onDark={onDark} label={registerLabel} {...itemProps} />
+      {showRegister && <RegisterCta size={size} onDark={onDark} label={registerLabel} {...itemProps} />}
     </div>
   )
 }
