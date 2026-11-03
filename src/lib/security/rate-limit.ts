@@ -53,7 +53,7 @@ export async function rateLimit(
     })
 
     return { allowed: true, remaining: Math.max(0, max - updated.count), retryAfterSeconds: 0 }
-  } catch (error) {
+  } catch {
     // In dev / before migrations run, don't crash on missing rate-limit tables
     return { allowed: true, remaining: max, retryAfterSeconds: 0 }
   }
