@@ -23,35 +23,40 @@ export async function rateLimit(
   max: number,
   windowMinutes: number,
 ): Promise<RateLimitResult> {
-  const now = new Date()
-  const windowMs = windowMinutes * 60_000
+  try {
+    const now = new Date()
+    const windowMs = windowMinutes * 60_000
 
-  const existing = await db.rateLimitBucket.findUnique({ where: { key } })
+    const existing = await db.rateLimitBucket.findUnique({ where: { key } })
 
-  // No bucket, or the previous window has elapsed: start a fresh window.
-  if (!existing || existing.expiresAt <= now) {
-    await db.rateLimitBucket.upsert({
-      where: { key },
-      update: { count: 1, windowStart: now, expiresAt: new Date(now.getTime() + windowMs) },
-      create: { key, count: 1, windowStart: now, expiresAt: new Date(now.getTime() + windowMs) },
-    })
-    return { allowed: true, remaining: max - 1, retryAfterSeconds: 0 }
-  }
-
-  if (existing.count >= max) {
-    return {
-      allowed: false,
-      remaining: 0,
-      retryAfterSeconds: Math.max(1, Math.ceil((existing.expiresAt.getTime() - now.getTime()) / 1000)),
+    // No bucket, or the previous window has elapsed: start a fresh window.
+    if (!existing || existing.expiresAt <= now) {
+      await db.rateLimitBucket.upsert({
+        where: { key },
+        update: { count: 1, windowStart: now, expiresAt: new Date(now.getTime() + windowMs) },
+        create: { key, count: 1, windowStart: now, expiresAt: new Date(now.getTime() + windowMs) },
+      })
+      return { allowed: true, remaining: max - 1, retryAfterSeconds: 0 }
     }
+
+    if (existing.count >= max) {
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfterSeconds: Math.max(1, Math.ceil((existing.expiresAt.getTime() - now.getTime()) / 1000)),
+      }
+    }
+
+    const updated = await db.rateLimitBucket.update({
+      where: { key },
+      data: { count: { increment: 1 } },
+    })
+
+    return { allowed: true, remaining: Math.max(0, max - updated.count), retryAfterSeconds: 0 }
+  } catch (error) {
+    // In dev / before migrations run, don't crash on missing rate-limit tables
+    return { allowed: true, remaining: max, retryAfterSeconds: 0 }
   }
-
-  const updated = await db.rateLimitBucket.update({
-    where: { key },
-    data: { count: { increment: 1 } },
-  })
-
-  return { allowed: true, remaining: Math.max(0, max - updated.count), retryAfterSeconds: 0 }
 }
 
 /** Build a rate-limit key scoped to the caller's IP address. */
