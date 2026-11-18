@@ -51,7 +51,7 @@ Roles are defined in `prisma/schema.prisma` (`Role` enum) and mapped to explicit
 - **Returning-volunteer flow** (`/participate`): one page — department (previous one preselected), department questions, dates, shift periods, overnight availability, this edition's consents.
 - **Dashboard**: nine-stage journey status, announcements, shifts, FAQs, resources, account management.
 - **Public pages**: homepage with countdown, About, Contact, legal (terms/privacy), testimony submission (moderated), newsletter signup, "attending" share card. All other destinations (Blog, Gallery, Magazine, Radio, Prayer Request, Give) render "Coming soon" behind `NEXT_PUBLIC_FEATURE_*` flags (`src/config/features.ts`). **Donations are off** at launch by client instruction.
-- **Diaspora participation form** (diaspora.mmpraise.org): centres abroad affirm participation in 13 questions, no account needed; receipt reference and WhatsApp community link on completion.
+- **Diaspora participation form** (diaspora.mmpraise.org): centres abroad affirm participation in 13 questions, no account needed; receipt reference on completion.
 
 ### Administration
 - **Applications**: search, filter, paginate; full application view including department answers; approve / waitlist / reject / bulk-approve (capped at 500, server re-count contract); shift assignment; internal notes; CSV/Excel export behind a confirmation dialog and audit entry.

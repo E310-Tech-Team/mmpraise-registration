@@ -16,9 +16,6 @@ export const DIASPORA_META = {
   salutation: 'Dear Highly Esteemed,',
   intro:
     "We appreciate your willingness to be a part of this edition of Marathon Messiah's Praise. Kindly fill the form below to affirm your participation.",
-  communityPrompt:
-    'Please join the diaspora community for updates and further announcements. You could also share it with other members of your planning team.',
-  whatsappUrl: 'https://tinyurl.com/MMPDiasporaWhatsAppCommunity',
   confirmationMessage: 'Thank you for your time. Your response has been recorded. Blessings!',
 } as const
 
