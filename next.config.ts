@@ -1,6 +1,44 @@
 import type { NextConfig } from 'next'
 
+/**
+ * diaspora.mmpraise.org is this same app, not a second deployment: the shared
+ * proxy sends that host here, and these rules decide what it sees.
+ *
+ * Done with config rewrites rather than a proxy.ts on purpose. A proxy file runs
+ * on every request and buffers request bodies up to its own 10 MB cap, which
+ * would quietly undercut the 13 MB upload limit below.
+ */
+const DIASPORA_HOST = [{ type: 'host' as const, value: 'diaspora\\..+' }]
+
+/** Where anything else asked of the diaspora host is sent: the main site. */
+const MAIN_SITE = (process.env.NEXT_PUBLIC_SITE_URL || 'https://mmpraise.org').replace(/\/+$/, '')
+
 const nextConfig: NextConfig = {
+  async rewrites() {
+    return {
+      beforeFiles: [{ source: '/', has: DIASPORA_HOST, destination: '/diaspora' }],
+      afterFiles: [],
+      fallback: [],
+    }
+  },
+
+  async redirects() {
+    return [
+      {
+        /*
+         * Every page path except the form and the assets it loads. Without this
+         * the whole site — sign-in included — would also answer on the diaspora
+         * host, where the host-only session cookie does not apply.
+         */
+        source:
+          '/:path((?!_next/|diaspora|landing/|logo\\.png|icon|apple-icon|favicon\\.ico|robots\\.txt).+)',
+        has: DIASPORA_HOST,
+        destination: `${MAIN_SITE}/:path`,
+        permanent: false,
+      },
+    ]
+  },
+
   /**
    * Emit a self-contained server in `.next/standalone` with only the modules it
    * actually imports. The Docker image then needs neither `node_modules` nor the

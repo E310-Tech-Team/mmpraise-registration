@@ -59,6 +59,14 @@ export const PERMISSIONS = [
    * mass-email fourteen thousand people.
    */
   'migration:followup',
+
+  /*
+   * Responses to the diaspora participation form (diaspora.mmpraise.org): the
+   * names, emails and phone numbers of pastors and representatives abroad.
+   * Granted explicitly, never by role — only the super administrator has it by
+   * default.
+   */
+  'diaspora:view',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]

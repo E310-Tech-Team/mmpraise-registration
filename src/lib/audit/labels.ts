@@ -160,6 +160,12 @@ const DESCRIPTORS: Partial<Record<AuditAction, Descriptor>> = {
     label: 'reviewed their migrated profile',
     category: 'migration',
   },
+  'diaspora.submitted': { label: 'affirmed diaspora centre participation', category: 'content' },
+  'diaspora.exported': {
+    label: 'downloaded diaspora participation responses',
+    category: 'people',
+    security: true,
+  },
 }
 
 export function describeAction(action: string): Descriptor {

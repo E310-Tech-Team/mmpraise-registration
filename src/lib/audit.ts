@@ -88,6 +88,9 @@ export const AUDIT_ACTIONS = [
   'migration.reminder_run_cancelled',
   'migration.outreach_completed',
   'migration.profile_reviewed',
+  /** Diaspora participation form: public submissions and admin downloads. */
+  'diaspora.submitted',
+  'diaspora.exported',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

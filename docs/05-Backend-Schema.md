@@ -57,6 +57,11 @@ erDiagram
     testimony_submissions ||--o{ testimony_notes : moderation
     contact_messages ||--o{ contact_notes : handling
 
+    diaspora_submissions {
+        string reference "DSP-XXXXXX, unique"
+        string centreEmailKey "repeat grouping"
+    }
+
     church_continents ||--o{ church_regions : contains
     church_regions ||--o{ church_provinces : contains
     church_provinces ||--o{ church_zones : contains
@@ -123,6 +128,7 @@ erDiagram
 - `testimony_submissions` — moderation status (PENDING/APPROVED/REJECTED), `bodyHash?` (SHA-256 of normalised body for duplicate detection), advisory `assignedToId?`, `isSpam`, `isTestData`, `featuredAt?`, reviewer fields; → `testimony_notes` timeline.
 - `contact_messages` — `category` (GENERAL … DONATION/OTHER), `status` (NEW/IN_PROGRESS/RESOLVED), `priority` (LOW→URGENT), `firstReadAt?` (null = unread), advisory assignment, `messageHash?`, spam/test flags; → `contact_notes` timeline.
 - `newsletter_subscribers` — `email`•, consent, confirm/unsubscribe timestamps, source, ip.
+- `diaspora_submissions` (2026-11-18) — one row per diaspora centre response from diaspora.mmpraise.org; no user relation. `reference`• (`DSP-` + 6 unambiguous characters, shown to the submitter), `edition`, the 13 answers as columns (`country`, `countryPastorName/Email/Phone?`, `continentalOverseer`, `centreNameAndLocation`, `centreOfficialEmail`, `picName?/picEmail?/picPhone?`, `repName/Email/Phone`), `centreEmailKey` (lower-cased centre email — repeats are grouped on it, never refused), `ip?`, `userAgent?`, `createdAt`. Indexes: `(edition, createdAt)`, `centreEmailKey`.
 
 ### Legacy migration & jobs
 
@@ -163,8 +169,11 @@ Most mutations are **Server Actions** (colocated `actions.ts` files: `(auth)`, `
 | `GET /api/files/[id]` | Authorised download of a stored document | owner or permitted admin |
 | `GET /api/admin/export` | Filtered applicant CSV/Excel export — accepts every list filter, including `status` (comma list), `confirmed`, `participation`, `submittedFrom/To` (Lagos dates), `imported` | `application:export`, audited |
 | `GET /api/admin/export/contacts` | Contact messages export | `contact:manage` |
+| `GET /api/admin/export/diaspora` | Diaspora responses CSV/Excel — `q`, `country`, `edition` (same filters as `/admin/diaspora`), includes a per-row repeat count | `diaspora:view`, audited (`diaspora.exported`) |
 | `GET /api/admin/previous-participants/export` | Person-level previous-participants CSV — the complete filtered set (same filters as the People screen), paged server-side | `migration:export`, audited |
 
 Server actions added 2026-10-13: `previous-participants/followup-actions.ts` (`logContactAction`, `bulkLogContactAction` — counted contract: `expectedCount` re-checked, cap 500, selection mode `ids` vs `filter`), `previous-participants/outreach-actions.ts` (`previewReminderAction`, `createReminderRunAction` with `expectedCount`, `outreachProgressAction` — the poll that advances sending, `cancelOutreachRunAction`).
 
-Permissions enumerated in `src/lib/auth/rbac.ts`: `application:*` (view_own/edit_own/view_all/view_department/review/decide/assign_shift/note/export), `health:view`, `volunteer:message`, `announcement:manage`, `department:manage`, `question:manage`, `reference:manage`, `settings:manage`, `user:manage`, `audit:view`, `testimony:moderate`, `testimony:contact_view`, `contact:manage`, `migration:view/create/execute/invite/export`, **`migration:followup`** (log manual contact — deliberately separate from `migration:invite`, the mass-email permission; granted to Registration Administrators and Super Administrators).
+Permissions enumerated in `src/lib/auth/rbac.ts`: `application:*` (view_own/edit_own/view_all/view_department/review/decide/assign_shift/note/export), `health:view`, `volunteer:message`, `announcement:manage`, `department:manage`, `question:manage`, `reference:manage`, `settings:manage`, `user:manage`, `audit:view`, `testimony:moderate`, `testimony:contact_view`, `contact:manage`, `migration:view/create/execute/invite/export`, **`migration:followup`** (log manual contact — deliberately separate from `migration:invite`, the mass-email permission; granted to Registration Administrators and Super Administrators), **`diaspora:view`** (diaspora responses and their download — Super Administrator by default, otherwise granted per administrator in the permission matrix).
+
+Server action added 2026-11-18: `src/app/diaspora/actions.ts` → `submitDiasporaAction` (public; rate limit 20/hour/IP, honeypot, `diasporaSchema` from `src/lib/validation/diaspora.ts`, country checked against the active country list, audited as `diaspora.submitted`).

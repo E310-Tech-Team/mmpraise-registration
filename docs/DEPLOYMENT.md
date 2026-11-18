@@ -250,6 +250,22 @@ start by accident and collide on port 80. For a box where this stack *does* own
 the ports, leave `PROXY_NETWORK` unset and bring it up with
 `docker compose --profile standalone up -d`.
 
+**The diaspora host.** diaspora.mmpraise.org is this same app (see
+[02-TRD.md](02-TRD.md) "Hosts"). It needs two things outside this repository:
+
+1. A Cloudflare DNS record `diaspora` → the VPS IP, **DNS only** (grey cloud),
+   matching the apex record.
+2. The shared Caddy's site block (`/opt/rcawards/deploy/Caddyfile` on the VPS,
+   mounted into `rcawards-caddy-1`) must name both hosts:
+
+   ```
+   mmpraise.org, diaspora.mmpraise.org {
+   ```
+
+   then reload without restarting the other sites:
+   `docker exec rcawards-caddy-1 caddy reload --config /etc/caddy/Caddyfile`.
+   Add DNS first — Caddy requests the certificate as soon as it sees the name.
+
 ### Where the public configuration lives now
 
 **This is the part that changes for you.** `NEXT_PUBLIC_*` values are compiled

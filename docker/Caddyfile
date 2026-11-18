@@ -8,7 +8,9 @@
 	email {$ACME_EMAIL}
 }
 
-{$SITE_DOMAIN} {
+# The diaspora participation form is the same app on a subdomain; next.config.ts
+# routes the host. Its DNS record must exist before Caddy can obtain the cert.
+{$SITE_DOMAIN}, diaspora.{$SITE_DOMAIN} {
 	encode zstd gzip
 
 	# Uploads are capped at MAX_UPLOAD_MB (5 by default). 12 MB leaves room for

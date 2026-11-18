@@ -50,6 +50,8 @@ All environment variables are documented in `.env.example` and [SETUP.md](SETUP.
 - `NEXT_PUBLIC_FEATURE_*` — launch flags (`src/config/features.ts`). Registration, admin and legal pages are always on; Give/Blog/Gallery/Magazine/Radio/Prayer Request default off.
 - SMTP and S3 credentials — optional in dev (falls back to `storage/mail` and local disk).
 
+**Hosts.** The app answers on `mmpraise.org` and `diaspora.mmpraise.org`. `next.config.ts` routes by host: `/` on `diaspora.*` rewrites to `/diaspora`, and every other page path there redirects to `NEXT_PUBLIC_SITE_URL` (the session cookie is host-only, so the rest of the site must not answer on the subdomain). Config rewrites are used instead of `proxy.ts`, which would buffer request bodies at its own 10 MB cap. In production both hosts must be listed on the shared edge Caddy ([DEPLOYMENT.md](DEPLOYMENT.md)).
+
 `NEXT_PUBLIC_*` values are compiled into the browser bundle, so Docker builds must pass them as build args (`--env-file .env.production` is mandatory — see the header comment of `docker-compose.yml`).
 
 ## 4. Security requirements (implemented)
