@@ -169,7 +169,7 @@ Visitor submits `/contact` → stored `NEW` (never emailed onward) → admin inb
 flowchart LR
   W[Welcome] --> Q[13 questions, one per screen<br/>draft kept in localStorage] --> R[Review<br/>edit any answer] --> S[submitDiasporaAction]
   S -->|rate limit 20/h/IP, honeypot,<br/>Zod + country list check| DB[(diaspora_submissions)]
-  S --> C[Confirmation: DSP- reference + WhatsApp community link]
+  S --> C[Confirmation: DSP- reference]
   DB --> A[/admin/diaspora — diaspora:view/] --> X[CSV download, audited]
 ```
 

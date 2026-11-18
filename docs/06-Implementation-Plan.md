@@ -81,13 +81,13 @@ Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose
 | Part | Status |
 |---|---|
 | `diaspora_submissions` table + migration `20261118120000_diaspora_submissions` | **Done** |
-| Public form (`/diaspora`): 13 questions carried over verbatim, one per screen, review, receipt, WhatsApp community link, localStorage draft; MMPraise brand primitives | **Done** |
+| Public form (`/diaspora`): 13 questions carried over verbatim, one per screen, review, receipt, localStorage draft (WhatsApp community link removed 2026-11-18 at the owner's request); MMPraise brand primitives | **Done** |
 | Host routing in `next.config.ts` (rewrite `/` on `diaspora.*`, redirect other pages to the main site) — config rewrites, not `proxy.ts`, to keep the 13 MB upload limit intact | **Done** |
 | `submitDiasporaAction`: rate limit, honeypot, shared Zod schema, country-list check, audit | **Done** |
 | Admin `/admin/diaspora` list + detail, repeat flag, CSV/Excel export; `diaspora:view` permission (Super Administrator by default, grantable per admin) | **Done** |
 | Tests: unit (validation, reference format, permission, host routing), integration (storage, repeat grouping, search) | **Done** |
-| Cloudflare DNS `diaspora` A record → VPS (DNS only, like the apex) | **Pending — owner action** |
-| Shared edge Caddy (`/opt/rcawards/deploy/Caddyfile`): add `diaspora.mmpraise.org` to the `mmpraise.org` site block, reload | **Pending — after DNS** |
+| Cloudflare DNS `diaspora` A record → VPS (DNS only, like the apex) | **Done** (2026-11-18) |
+| Shared edge Caddy (`/opt/rcawards/deploy/Caddyfile`): add `diaspora.mmpraise.org` to the `mmpraise.org` site block, reload | **Done** (2026-11-18; same change raised the edge body cap 8 MB → 14 MB, just above the app's 13 MB) |
 
 ## 3. What remains before launch
 

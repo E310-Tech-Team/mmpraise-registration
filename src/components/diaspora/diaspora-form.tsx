@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { ArrowLeft, ArrowRight, Check, MessageCircle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react'
 import { submitDiasporaAction } from '@/app/diaspora/actions'
 import { Alert, Button } from '@/components/ui/primitives'
 import { SelectInput, TextInput } from '@/components/ui/form'
@@ -373,19 +373,6 @@ export function DiasporaForm({ countries }: { countries: string[] }) {
                 Your reference: <span className="font-semibold tabular-nums text-ink">{reference}</span>
               </p>
             )}
-          </div>
-
-          <div className="space-y-3 rounded-card border border-line bg-surface p-5">
-            <p className="text-sm text-body">{DIASPORA_META.communityPrompt}</p>
-            <a
-              href={DIASPORA_META.whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm font-semibold text-primary underline-offset-4 hover:underline"
-            >
-              <MessageCircle aria-hidden className="size-4" /> Join the diaspora WhatsApp community
-              <span className="sr-only">(opens in a new tab)</span>
-            </a>
           </div>
 
           <Button variant="outline" onClick={startOver}>
