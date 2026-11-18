@@ -74,6 +74,21 @@ The ordering logic: the **volunteer model correction** (Part A — register once
 | Background sending without an open admin screen | **Not done** — sending advances while an admin has the batch screen or reminder dialog open (Phase 15 scheduler) |
 | Delivery/bounce tracking | **Out of scope** — needs a provider webhook; "Sent" means SMTP acceptance |
 
+### Diaspora participation form (2026-11-18)
+
+Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose API route stored nothing) with a form served by this app at diaspora.mmpraise.org.
+
+| Part | Status |
+|---|---|
+| `diaspora_submissions` table + migration `20261118120000_diaspora_submissions` | **Done** |
+| Public form (`/diaspora`): 13 questions carried over verbatim, one per screen, review, receipt, WhatsApp community link, localStorage draft; MMPraise brand primitives | **Done** |
+| Host routing in `next.config.ts` (rewrite `/` on `diaspora.*`, redirect other pages to the main site) — config rewrites, not `proxy.ts`, to keep the 13 MB upload limit intact | **Done** |
+| `submitDiasporaAction`: rate limit, honeypot, shared Zod schema, country-list check, audit | **Done** |
+| Admin `/admin/diaspora` list + detail, repeat flag, CSV/Excel export; `diaspora:view` permission (Super Administrator by default, grantable per admin) | **Done** |
+| Tests: unit (validation, reference format, permission, host routing), integration (storage, repeat grouping, search) | **Done** |
+| Cloudflare DNS `diaspora` A record → VPS (DNS only, like the apex) | **Pending — owner action** |
+| Shared edge Caddy (`/opt/rcawards/deploy/Caddyfile`): add `diaspora.mmpraise.org` to the `mmpraise.org` site block, reload | **Pending — after DNS** |
+
 ## 3. What remains before launch
 
 From [GO-LIVE.md](GO-LIVE.md), [README.md](../README.md) ("Before you open registration") and the roadmap's open decisions:

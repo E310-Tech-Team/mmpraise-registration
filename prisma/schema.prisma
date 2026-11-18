@@ -1730,6 +1730,52 @@ model ParticipantContactLog {
   @@map("participant_contact_logs")
 }
 
+/**
+ * A diaspora centre affirming its participation, from the public form at
+ * diaspora.mmpraise.org. No account is involved: the people filling it in are
+ * pastors and representatives abroad, not volunteers.
+ *
+ * Repeat submissions are kept, not refused — a centre correcting its details
+ * submits again. The admin list groups them by `centreEmailKey` and flags the
+ * repeats, so nobody has to judge "is this the same centre" from free text.
+ */
+model DiasporaSubmission {
+  id String @id @default(cuid())
+
+  /** Shown to the submitter as their receipt, e.g. DSP-7K2Q9M. */
+  reference String @unique
+
+  /** Which Marathon Messiah's Praise the centre is affirming for. */
+  edition String
+
+  country             String
+  countryPastorName   String
+  countryPastorEmail  String
+  countryPastorPhone  String?
+  continentalOverseer String
+
+  centreNameAndLocation String
+  centreOfficialEmail   String
+  picName               String?
+  picEmail              String?
+  picPhone              String?
+
+  repName  String
+  repEmail String
+  repPhone String
+
+  /** Lower-cased centre email: the key repeat submissions are grouped on. */
+  centreEmailKey String
+
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([edition, createdAt])
+  @@index([centreEmailKey])
+  @@map("diaspora_submissions")
+}
+
 model NewsletterSubscriber {
   id             String    @id @default(cuid())
   email          String    @unique

@@ -15,6 +15,7 @@ Every route below exists in `src/app` (App Router). Route groups carry the guard
 | `/contact` | Contact form (categories, stored as `ContactMessage`, never emailed onward) |
 | `/attending` | "I will be attending" share-card generator (built entirely in the browser) |
 | `/terms`, `/privacy` | Legal pages, opened in a new tab from consent checkboxes |
+| `diaspora.mmpraise.org/` (also `/diaspora` on the main host) | Diaspora participation form — 13 questions, one per screen, then review and a `DSP-` receipt. Host routing in `next.config.ts`: `/` on the diaspora host rewrites to `/diaspora`; every other page path there redirects to the main site |
 | Blog / Gallery / Magazine / Radio / Prayer Request / Give | "Coming soon" until the matching `NEXT_PUBLIC_FEATURE_*` flag is on (`src/config/features.ts`) |
 
 ### Authentication `(auth)`
@@ -49,6 +50,7 @@ Every route below exists in `src/app` (App Router). Route groups carry the guard
 | `/admin/announcements`, `.../new`, `.../[id]` | Announcement lifecycle list and editor | `announcement:manage` |
 | `/admin/departments`, `.../[id]`, `.../[id]/questions` | Departments and the question builder with live preview | `department:manage`, `question:manage` |
 | `/admin/previous-participants`, `.../new`, `.../[id]` | Legacy CSV migration: batches, upload/map, batch detail | `migration:*` |
+| `/admin/diaspora`, `/admin/diaspora/[id]` | Diaspora responses: search, country/edition filters, repeat flag, CSV download; full response detail | `diaspora:view` |
 | `/admin/users`, `/admin/users/[id]` | Administrators: list, permission matrix, suspend/disable, role history | `user:manage` |
 | `/admin/reference` | Countries/states, RCCG hierarchy, lookup options | `reference:manage` |
 | `/admin/settings` | Registration open/close and operational settings | `settings:manage` |
@@ -63,6 +65,7 @@ Every route below exists in `src/app` (App Router). Route groups carry the guard
 | `GET /api/files/[id]` | Authorised file download — the only way a stored file is served |
 | `GET /api/admin/export` | Filtered applicant export (CSV/Excel), audited |
 | `GET /api/admin/export/contacts` | Contact-message export |
+| `GET /api/admin/export/diaspora` | Diaspora responses CSV/Excel, same filters as the list, audited |
 
 Plus `robots.ts`, `sitemap.ts`, `opengraph-image.tsx` at the app root.
 
@@ -159,6 +162,18 @@ Visitor submits on the homepage → stored `PENDING` with normalised body hash (
 ### 3.6 Contact message
 
 Visitor submits `/contact` → stored `NEW` (never emailed onward) → admin inbox: first open records `firstReadAt`, triage priority/assignment/notes → reply via handler's own mail client (`mailto:`) → `RESOLVED`.
+
+### 3.7 Diaspora participation
+
+```mermaid
+flowchart LR
+  W[Welcome] --> Q[13 questions, one per screen<br/>draft kept in localStorage] --> R[Review<br/>edit any answer] --> S[submitDiasporaAction]
+  S -->|rate limit 20/h/IP, honeypot,<br/>Zod + country list check| DB[(diaspora_submissions)]
+  S --> C[Confirmation: DSP- reference + WhatsApp community link]
+  DB --> A[/admin/diaspora — diaspora:view/] --> X[CSV download, audited]
+```
+
+No account is involved. A centre that submits again is stored again, not refused; the admin list flags responses sharing a centre email (case-insensitive) as **Repeat ×n** for the same edition.
 
 ---
 
