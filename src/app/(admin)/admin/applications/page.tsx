@@ -4,7 +4,7 @@ import { ApplicationFilters } from '@/components/admin/application-filters'
 import { BulkApprove } from '@/components/admin/bulk-approve'
 import { ExportConfirm } from '@/components/admin/export-confirm'
 import { Badge, buttonClass, Card, CardBody, EmptyState } from '@/components/ui/primitives'
-import { can, requirePermission } from '@/lib/auth/rbac'
+import { can, requireApplicantViewer } from '@/lib/auth/rbac'
 import { countReviewable, listApplications, type ApplicationFilters as Filters } from '@/lib/admin/queries'
 import { STATUS_LABELS, STATUS_TONES } from '@/lib/applications/status'
 import {
@@ -25,7 +25,7 @@ export default async function ApplicationsPage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
-  const user = await requirePermission('application:review')
+  const user = await requireApplicantViewer()
   const params = await searchParams
 
   const filters: Filters = {

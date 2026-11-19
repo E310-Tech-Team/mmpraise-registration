@@ -5,7 +5,7 @@ import { ArrowLeft, FileText, Paperclip } from 'lucide-react'
 import { HealthPanel, NotesPanel, StatusPanel } from '@/components/admin/review-panel'
 import { Badge, buttonClass, Card, CardBody, CardHeader } from '@/components/ui/primitives'
 import { eventConfig } from '@/config/site'
-import { can, requirePermission } from '@/lib/auth/rbac'
+import { can, requireApplicantViewer } from '@/lib/auth/rbac'
 import { getApplicationForReview } from '@/lib/admin/queries'
 import { STATUS_LABELS, STATUS_TONES } from '@/lib/applications/status'
 import { formatDate, humanise, initials } from '@/lib/utils'
@@ -14,7 +14,7 @@ import { AGE_RANGES, DENOMINATIONS, SHIFT_PERIODS } from '@/lib/validation/regis
 export const metadata: Metadata = { title: 'Application review' }
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await requirePermission('application:review')
+  const user = await requireApplicantViewer()
   const { id } = await params
   const application = await getApplicationForReview(user, id)
 
@@ -254,11 +254,20 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
         </div>
 
         <div className="space-y-6">
-          <StatusPanel
-            applicationId={application.id}
-            currentStatus={application.status}
-            canDecide={can(user, 'application:decide')}
-          />
+          {can(user, 'application:review') ? (
+            <StatusPanel
+              applicationId={application.id}
+              currentStatus={application.status}
+              canDecide={can(user, 'application:decide')}
+            />
+          ) : (
+            // View-only access (e.g. Communication Officers): the status is in
+            // the header; changing it needs application:review, which the
+            // server action enforces regardless of what is shown here.
+            <Card>
+              <CardHeader title="Status" description="You can view this application but not change its status." />
+            </Card>
+          )}
 
           <HealthPanel applicationId={application.id} canView={can(user, 'health:view')} />
 

@@ -247,6 +247,31 @@ export async function requirePermission(permission: Permission): Promise<Session
   return user
 }
 
+/**
+ * Who may open the applicant list and application pages.
+ *
+ * Seeing applicants and acting on them are different grants. `application:review`
+ * also moves applications between statuses, so a role that only needs to *read*
+ * the list — a Communication Officer choosing who to message — holds
+ * `application:view_all` instead and gets the pages without the status controls.
+ * What each viewer actually sees is still narrowed by `departmentScope`.
+ */
+export const APPLICANT_VIEW_PERMISSIONS = [
+  'application:review',
+  'application:view_all',
+  'application:view_department',
+] as const satisfies readonly Permission[]
+
+export function canViewApplicants(user: SessionUser): boolean {
+  return APPLICANT_VIEW_PERMISSIONS.some((permission) => can(user, permission))
+}
+
+export async function requireApplicantViewer(): Promise<SessionUser> {
+  const user = await requireUser()
+  if (!canViewApplicants(user)) redirect('/dashboard?denied=1')
+  return user
+}
+
 export async function requireAdmin(): Promise<SessionUser> {
   const user = await requireUser()
   if (!isAdmin(user)) redirect('/dashboard?denied=1')

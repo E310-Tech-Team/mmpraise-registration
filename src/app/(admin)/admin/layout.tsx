@@ -15,7 +15,7 @@ import {
   Users,
 } from 'lucide-react'
 import { AppHeader } from '@/components/layout/app-header'
-import { can, requireAdmin, type Permission } from '@/lib/auth/rbac'
+import { APPLICANT_VIEW_PERMISSIONS, can, requireAdmin, type Permission } from '@/lib/auth/rbac'
 
 /**
  * Administration shell.
@@ -24,7 +24,8 @@ import { can, requireAdmin, type Permission } from '@/lib/auth/rbac'
  * they cannot use. Each page re-checks its own permission — the nav is a
  * convenience, never the access control.
  */
-type NavItem = { href: string; label: string; icon: typeof Users; permission: Permission }
+/** `permission` may list several: holding any one of them shows the item. */
+type NavItem = { href: string; label: string; icon: typeof Users; permission: Permission | readonly Permission[] }
 
 /**
  * Grouped navigation.
@@ -43,7 +44,13 @@ const NAV: { title: string; items: NavItem[] }[] = [
   {
     title: 'Applications',
     items: [
-      { href: '/admin/applications', label: 'Applicants', icon: Users, permission: 'application:review' },
+      {
+        href: '/admin/applications',
+        label: 'Applicants',
+        icon: Users,
+        // Viewing, not reviewing: see APPLICANT_VIEW_PERMISSIONS in rbac.ts.
+        permission: APPLICANT_VIEW_PERMISSIONS,
+      },
     ],
   },
   {
@@ -118,7 +125,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const groups = NAV.map((group) => ({
     ...group,
-    items: group.items.filter((item) => can(user, item.permission)),
+    items: group.items.filter((item) =>
+      (typeof item.permission === 'string' ? [item.permission] : item.permission).some((p) => can(user, p)),
+    ),
   })).filter((group) => group.items.length > 0)
 
   return (

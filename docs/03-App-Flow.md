@@ -45,7 +45,7 @@ Every route below exists in `src/app` (App Router). Route groups carry the guard
 | Route | Screen | Gate (from `src/lib/auth/rbac.ts`) |
 |---|---|---|
 | `/admin` | Overview command centre — needs-attention queue, event bar, lifecycle counts, trends, recent activity | admin |
-| `/admin/applications`, `/admin/applications/[id]` | Applicant list (filters, bulk approve, export) and full application review | `application:view_all` / `view_department`, `application:decide` |
+| `/admin/applications`, `/admin/applications/[id]` | Applicant list (filters, bulk approve, export, message) and full application review | to open: any of `application:review` / `view_all` / `view_department` (`requireApplicantViewer`); status changes: `application:review`; decisions: `application:decide`. Communication Officers get these pages view-only |
 | `/admin/testimonies`, `/admin/testimonies/[id]` | Moderation queue and detail with note timeline | `testimony:moderate` (+ `testimony:contact_view`) |
 | `/admin/messages` | Contact inbox — split-view helpdesk | `contact:manage` |
 | `/admin/announcements`, `.../new`, `.../[id]` | Announcement lifecycle list and editor | `announcement:manage` |
