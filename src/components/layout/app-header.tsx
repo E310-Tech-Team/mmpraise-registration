@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { LayoutDashboard, LogOut, Settings, ShieldCheck } from 'lucide-react'
+import { LayoutDashboard, LogOut, Mail, Settings, ShieldCheck } from 'lucide-react'
+import { unreadMessageCount } from '@/lib/messages/service'
 import { signOutAction } from '@/app/(auth)/actions'
 import { Logo } from '@/components/ui/primitives'
 import { isAdmin } from '@/lib/auth/rbac'
@@ -12,7 +13,9 @@ import { initials } from '@/lib/utils'
  * Labels use `sr-only sm:not-sr-only` rather than `hidden sm:inline`: hiding the
  * text on small screens would leave icon-only controls with no accessible name.
  */
-export function AppHeader({ user }: { user: SessionUser }) {
+export async function AppHeader({ user }: { user: SessionUser }) {
+  const unread = await unreadMessageCount(user.id)
+
   return (
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
@@ -27,6 +30,20 @@ export function AppHeader({ user }: { user: SessionUser }) {
           >
             <LayoutDashboard aria-hidden className="size-4" />
             <span className="sr-only sm:not-sr-only">Dashboard</span>
+          </Link>
+
+          <Link
+            href="/dashboard/messages"
+            className="inline-flex min-h-11 items-center gap-2 rounded-pill px-3 py-2 text-sm font-semibold text-body hover:bg-surface-sunken"
+          >
+            <Mail aria-hidden className="size-4" />
+            <span className="sr-only sm:not-sr-only">Messages</span>
+            {unread > 0 && (
+              <span className="inline-flex min-w-5 items-center justify-center rounded-pill bg-primary px-1.5 text-xs font-bold text-white">
+                {unread > 99 ? '99+' : unread}
+                <span className="sr-only"> unread</span>
+              </span>
+            )}
           </Link>
 
           <Link

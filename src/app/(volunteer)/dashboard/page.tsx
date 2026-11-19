@@ -27,7 +27,9 @@ import { CardStagger } from '@/components/volunteer/card-stagger'
 import { DashboardFaqs } from '@/components/volunteer/dashboard-faqs'
 import { DashboardHero } from '@/components/volunteer/dashboard-hero'
 import { JourneyTimeline } from '@/components/volunteer/journey-timeline'
+import { MessageList } from '@/components/volunteer/message-list'
 import { NotificationFeed } from '@/components/volunteer/notification-feed'
+import { inboxFor, unreadMessageCount } from '@/lib/messages/service'
 import { RegistrationProgress } from '@/components/volunteer/registration-progress'
 import { ShiftList } from '@/components/volunteer/shift-list'
 import { Alert, Card, CardBody, CardHeader, EmptyState, buttonClass } from '@/components/ui/primitives'
@@ -138,6 +140,10 @@ export default async function DashboardPage({
   // Tick the lazy lifecycle clock first, so a scheduled announcement whose
   // moment has come is already PUBLISHED by the time this query runs.
   await promoteDueAnnouncements()
+  // The latest few direct messages; the full inbox is /dashboard/messages.
+  const messages = await inboxFor(user.id, 3)
+  const unreadMessages = await unreadMessageCount(user.id)
+
   const announcements = await db.announcement.findMany({
     where: {
       status: 'PUBLISHED',
@@ -488,6 +494,27 @@ export default async function DashboardPage({
               </CardBody>
             </Card>
           )}
+
+          <Card id="dashboard-messages" className="scroll-mt-6">
+            <CardHeader
+              title="Messages"
+              description={
+                unreadMessages > 0
+                  ? `${unreadMessages} unread from the volunteer team.`
+                  : 'Messages from the volunteer team, addressed to you.'
+              }
+              action={
+                messages.length > 0 ? (
+                  <Link href="/dashboard/messages" className={buttonClass({ variant: 'ghost', size: 'sm' })}>
+                    View all
+                  </Link>
+                ) : undefined
+              }
+            />
+            <CardBody>
+              <MessageList items={messages} />
+            </CardBody>
+          </Card>
 
           <Card>
             <CardHeader

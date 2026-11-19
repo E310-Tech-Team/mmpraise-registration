@@ -91,6 +91,8 @@ export const AUDIT_ACTIONS = [
   /** Diaspora participation form: public submissions and admin downloads. */
   'diaspora.submitted',
   'diaspora.exported',
+  /** A direct message to one or more volunteers' dashboard inboxes. */
+  'volunteer_message.sent',
 ] as const
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]

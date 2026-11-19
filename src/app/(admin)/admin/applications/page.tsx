@@ -84,6 +84,16 @@ export default async function ApplicationsPage({
           {can(user, 'application:export') && result.total > 0 && (
             <ExportConfirm total={result.total} exportQuery={exportQuery} />
           )}
+          {can(user, 'volunteer:message') && result.total > 0 && (
+            // The compose page reads only the filter keys from this query and
+            // re-counts with the same scoping, so it messages exactly this list.
+            <Link
+              href={`/admin/volunteer-messages/new?${exportQuery}`}
+              className={buttonClass({ variant: 'secondary', size: 'sm' })}
+            >
+              Message these volunteers
+            </Link>
+          )}
         </div>
       </div>
 

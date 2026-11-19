@@ -51,6 +51,7 @@ Roles are defined in `prisma/schema.prisma` (`Role` enum) and mapped to explicit
 - **Returning-volunteer flow** (`/participate`): one page — department (previous one preselected), department questions, dates, shift periods, overnight availability, this edition's consents.
 - **Dashboard**: nine-stage journey status, announcements, shifts, FAQs, resources, account management.
 - **Public pages**: homepage with countdown, About, Contact, legal (terms/privacy), testimony submission (moderated), newsletter signup, "attending" share card. All other destinations (Blog, Gallery, Magazine, Radio, Prayer Request, Give) render "Coming soon" behind `NEXT_PUBLIC_FEATURE_*` flags (`src/config/features.ts`). **Donations are off** at launch by client instruction.
+- **Messages inbox** (`/dashboard/messages`): direct messages from the volunteer team, with an unread badge in the header and the latest three on the dashboard. One-way; opening a message marks it read.
 - **Diaspora participation form** (diaspora.mmpraise.org): centres abroad affirm participation in 13 questions, no account needed; receipt reference on completion.
 
 ### Administration
@@ -60,6 +61,7 @@ Roles are defined in `prisma/schema.prisma` (`Role` enum) and mapped to explicit
 - **Testimonies**: moderation queue with duplicate detection (normalised body hash), assignment, spam/test flags, featured flag, note timeline; contact details behind `testimony:contact_view`.
 - **Messages**: split-view contact inbox with priority, assignment, unread tracking (`firstReadAt`), duplicate grouping, note timeline.
 - **Previous participants**: CSV upload → column mapping → dry-run validation → confirm → chunked import → invitations, all idempotent (file checksum + row-number uniqueness), with a database-backed job queue (`ImportJob`).
+- **Direct messages**: message one volunteer (from their application) or everyone matching the applicant-list filters, with an optional email notice (subject only); per-recipient read tracking. Gated by `volunteer:message`; recipients are always limited to the applicants the sender can see.
 - **Diaspora responses**: search and filter centre responses, repeat-submission flag, CSV/Excel download — under the existing admin login, gated by `diaspora:view`.
 - **Administrators**: role management, three-state permission matrix, suspend-until/disable, role assignment history, self-protection rules.
 - **Reference data**: countries/states, RCCG church hierarchy, lookup options — editable in admin.

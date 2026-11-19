@@ -38,6 +38,7 @@ Every route below exists in `src/app` (App Router). Route groups carry the guard
 | `/dashboard` | Nine-stage journey hero, notifications, announcements, shifts, FAQs, resources |
 | `/dashboard/summary` | Printable application summary |
 | `/dashboard/account` | Account management (email, password, deletion request) |
+| `/dashboard/messages`, `/dashboard/messages/[id]` | Direct-message inbox; opening a message marks it read (only the recipient's own copy can be opened) |
 
 ### Administration `(admin)` — all under `/admin`
 
@@ -48,6 +49,7 @@ Every route below exists in `src/app` (App Router). Route groups carry the guard
 | `/admin/testimonies`, `/admin/testimonies/[id]` | Moderation queue and detail with note timeline | `testimony:moderate` (+ `testimony:contact_view`) |
 | `/admin/messages` | Contact inbox — split-view helpdesk | `contact:manage` |
 | `/admin/announcements`, `.../new`, `.../[id]` | Announcement lifecycle list and editor | `announcement:manage` |
+| `/admin/volunteer-messages`, `.../new`, `.../[id]` | Direct messages: sent list with read counts, compose (`?to=<userId>` or applicant-list filters), per-message recipients and read state | `volunteer:message` |
 | `/admin/departments`, `.../[id]`, `.../[id]/questions` | Departments and the question builder with live preview | `department:manage`, `question:manage` |
 | `/admin/previous-participants`, `.../new`, `.../[id]` | Legacy CSV migration: batches, upload/map, batch detail | `migration:*` |
 | `/admin/diaspora`, `/admin/diaspora/[id]` | Diaspora responses: search, country/edition filters, repeat flag, CSV download; full response detail | `diaspora:view` |
@@ -162,6 +164,21 @@ Visitor submits on the homepage → stored `PENDING` with normalised body hash (
 ### 3.6 Contact message
 
 Visitor submits `/contact` → stored `NEW` (never emailed onward) → admin inbox: first open records `firstReadAt`, triage priority/assignment/notes → reply via handler's own mail client (`mailto:`) → `RESOLVED`.
+
+### 3.8 Direct message to volunteers
+
+```mermaid
+flowchart LR
+  L[/admin/applications — filtered list/] -->|Message these volunteers| C
+  A[/admin/applications/id/] -->|Message volunteer| C[Compose: count shown, email notice optional]
+  C --> S[sendVolunteerMessageAction]
+  S -->|re-resolve with sender's scope;<br/>refuse if count changed| DB[(volunteer_messages +<br/>volunteer_message_recipients)]
+  S -->|if ticked, ≤500| E[Email notice: subject + inbox link only]
+  DB --> V[Volunteer: header badge, dashboard card, /dashboard/messages]
+  V -->|open| R[readAt set]
+```
+
+Limits: 5,000 recipients per message; email notices only up to 500 (sent inside the request, like announcement emails). Above those, an announcement is the right tool.
 
 ### 3.7 Diaspora participation
 

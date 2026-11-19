@@ -9,6 +9,7 @@ import {
   History,
   Inbox,
   Megaphone,
+  Send,
   MessageSquareQuote,
   Settings,
   Users,
@@ -62,6 +63,12 @@ const NAV: { title: string; items: NavItem[] }[] = [
     title: 'Communications',
     items: [
       { href: '/admin/messages', label: 'Messages', icon: Inbox, permission: 'application:review' },
+      {
+        href: '/admin/volunteer-messages',
+        label: 'Direct messages',
+        icon: Send,
+        permission: 'volunteer:message',
+      },
       {
         href: '/admin/announcements',
         label: 'Announcements',

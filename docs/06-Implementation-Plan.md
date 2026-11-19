@@ -89,6 +89,19 @@ Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose
 | Cloudflare DNS `diaspora` A record → VPS (DNS only, like the apex) | **Done** (2026-11-18) |
 | Shared edge Caddy (`/opt/rcawards/deploy/Caddyfile`): add `diaspora.mmpraise.org` to the `mmpraise.org` site block, reload | **Done** (2026-11-18; same change raised the edge body cap 8 MB → 14 MB, just above the app's 13 MB) |
 
+### Direct messages to volunteers (2026-11-19)
+
+| Part | Status |
+|---|---|
+| `volunteer_messages` + `volunteer_message_recipients`, migration `20261119120000_volunteer_messages` | **Done** |
+| Compose from the applicant list (all filters carried) or one application; counted confirm; sender-scoped recipients | **Done** |
+| Optional email notice (subject + inbox link only, ≤500 recipients), outcome recorded per message | **Done** |
+| Admin sent list with read counts; per-message recipient read state | **Done** |
+| Volunteer inbox, dashboard card, header unread badge, read-on-open | **Done** |
+| Tests: unit (schema, filter whitelist, email content), integration (scoping incl. department heads, read tracking, own-copy-only) | **Done** |
+| Replies / two-way conversations | **Not done** — one-way by decision; volunteers are pointed to the contact page |
+| Email notices above 500 recipients | **Not done** — would need the queued, chunked sending the outreach subsystem uses |
+
 ## 3. What remains before launch
 
 From [GO-LIVE.md](GO-LIVE.md), [README.md](../README.md) ("Before you open registration") and the roadmap's open decisions:
