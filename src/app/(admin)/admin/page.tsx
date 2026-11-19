@@ -20,7 +20,9 @@ import { ResponseStagesChart } from '@/components/admin/overview/charts/response
 import { SubmissionsTrendChart } from '@/components/admin/overview/charts/submissions-trend-chart'
 import { Badge, Card, CardBody, CardHeader, buttonClass } from '@/components/ui/primitives'
 import { eventConfig, eventEndsAt, eventStartsAt, formatEventDateTime } from '@/config/site'
-import { can, requirePermission } from '@/lib/auth/rbac'
+import { redirect } from 'next/navigation'
+import { firstAdminHref } from '@/components/admin/admin-nav'
+import { can, requireAdmin } from '@/lib/auth/rbac'
 import { getOverview } from '@/lib/admin/overview'
 import { EVERYONE } from '@/lib/admin/queries'
 import { percent } from '@/lib/admin/metrics'
@@ -42,7 +44,12 @@ export const metadata: Metadata = { title: 'Administration overview' }
  * each chart's own data table.
  */
 export default async function AdminOverviewPage() {
-  const user = await requirePermission('application:review')
+  const user = await requireAdmin()
+  // The overview is for reviewers. Every other administrator — a Communication
+  // Officer, say — is sent to the first section they can open, so the header's
+  // "Admin" link and old bookmarks to /admin land somewhere useful instead of
+  // bouncing them out of the admin area.
+  if (!can(user, 'application:review')) redirect(firstAdminHref(user) ?? '/dashboard?denied=1')
   const overview = await getOverview(user)
 
   const startsAt = eventStartsAt()
