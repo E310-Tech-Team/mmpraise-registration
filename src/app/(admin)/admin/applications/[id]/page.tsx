@@ -81,6 +81,14 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           <div className="flex flex-col items-start gap-2 sm:items-end">
             <Badge tone={STATUS_TONES[application.status]}>{STATUS_LABELS[application.status]}</Badge>
             <p className="text-sm text-muted">Submitted {formatDate(application.submittedAt, true)}</p>
+            {can(user, 'volunteer:message') && (
+              <Link
+                href={`/admin/volunteer-messages/new?to=${application.user.id}`}
+                className={buttonClass({ variant: 'secondary', size: 'sm' })}
+              >
+                Message volunteer
+              </Link>
+            )}
           </div>
         </CardBody>
       </Card>

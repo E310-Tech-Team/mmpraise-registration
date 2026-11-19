@@ -48,6 +48,9 @@ erDiagram
 
     announcements ||--o{ announcement_revisions : versions
     announcements ||--o{ announcement_deliveries : sends
+    users ||--o{ volunteer_messages : sends
+    volunteer_messages ||--o{ volunteer_message_recipients : "delivered as"
+    users ||--o{ volunteer_message_recipients : receives
     announcements }o--|| departments : audience
 
     migration_batches ||--o{ migrated_user_records : rows
@@ -122,6 +125,8 @@ erDiagram
 - `announcements` — audience (ALL_VOLUNTEERS / DEPARTMENT / APPROVED_ONLY), lifecycle `status` (DRAFT, SCHEDULED, PUBLISHED, EXPIRED, ARCHIVED), `priority`, `scheduledFor?`, `expiresAt?`, channels (`showOnDashboard`, `showAsBanner`, `sendEmail`, `emailSubject?`), `archivedAt?`.
 - `announcement_revisions` — `(announcementId, version)`•, full snapshot on every edit ("what exactly did we send?").
 - `announcement_deliveries` — per send-run counts (recipients/succeeded/failed) + failed addresses JSON; `isTest` flag.
+- `volunteer_messages` (2026-11-19) — a direct message: `subject`, `body` (plain text), `senderId?` → users (SetNull), `audience` ('individual' | 'filter'), `filters` Json? (the applicant-list filters used), `recipientCount`, email notice outcome (`emailRequested`, `emailSucceeded`, `emailFailed`, `emailFailures` Json?, `emailCompletedAt?`), `createdAt`. Index `createdAt`.
+- `volunteer_message_recipients` (2026-11-19) — one inbox copy per volunteer: `messageId` → volunteer_messages (Cascade), `userId` → users (Cascade), `readAt?` (null = unread), `createdAt`. Unique `(messageId, userId)`; index `(userId, readAt)` for the unread badge.
 
 ### Public platform
 
@@ -175,5 +180,7 @@ Most mutations are **Server Actions** (colocated `actions.ts` files: `(auth)`, `
 Server actions added 2026-10-13: `previous-participants/followup-actions.ts` (`logContactAction`, `bulkLogContactAction` — counted contract: `expectedCount` re-checked, cap 500, selection mode `ids` vs `filter`), `previous-participants/outreach-actions.ts` (`previewReminderAction`, `createReminderRunAction` with `expectedCount`, `outreachProgressAction` — the poll that advances sending, `cancelOutreachRunAction`).
 
 Permissions enumerated in `src/lib/auth/rbac.ts`: `application:*` (view_own/edit_own/view_all/view_department/review/decide/assign_shift/note/export), `health:view`, `volunteer:message`, `announcement:manage`, `department:manage`, `question:manage`, `reference:manage`, `settings:manage`, `user:manage`, `audit:view`, `testimony:moderate`, `testimony:contact_view`, `contact:manage`, `migration:view/create/execute/invite/export`, **`migration:followup`** (log manual contact — deliberately separate from `migration:invite`, the mass-email permission; granted to Registration Administrators and Super Administrators), **`diaspora:view`** (diaspora responses and their download — Super Administrator by default, otherwise granted per administrator in the permission matrix).
+
+Server action added 2026-11-19: `src/app/(admin)/admin/volunteer-messages/actions.ts` → `sendVolunteerMessageAction` (`volunteer:message`; counted confirm — recipients re-resolved through `buildWhere` with the sender's scope and refused if the count moved; caps 5,000 recipients / 500 email notices; audited as `volunteer_message.sent`). The existing `volunteer:message` permission (Super Admin, Registration Admin, Communication Officer) now also governs direct messages — note the Communication Officer has no applicant visibility, so in practice sends nothing until granted `application:view_all`.
 
 Server action added 2026-11-18: `src/app/diaspora/actions.ts` → `submitDiasporaAction` (public; rate limit 20/hour/IP, honeypot, `diasporaSchema` from `src/lib/validation/diaspora.ts`, country checked against the active country list, audited as `diaspora.submitted`).

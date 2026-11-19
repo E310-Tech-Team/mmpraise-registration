@@ -161,6 +161,7 @@ const DESCRIPTORS: Partial<Record<AuditAction, Descriptor>> = {
     category: 'migration',
   },
   'diaspora.submitted': { label: 'affirmed diaspora centre participation', category: 'content' },
+  'volunteer_message.sent': { label: 'sent a direct message to volunteers', category: 'content' },
   'diaspora.exported': {
     label: 'downloaded diaspora participation responses',
     category: 'people',

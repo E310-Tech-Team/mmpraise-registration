@@ -189,6 +189,32 @@ export function announcementEmail(params: { name: string; title: string; body: s
 }
 
 /**
+ * A notice that a direct message is waiting in the volunteer's inbox.
+ *
+ * Carries the subject only — not even a preview, unlike announcements. A
+ * direct message can be personal (about one person's application), and the
+ * inbox, behind sign-in, is the only place its contents should live.
+ */
+export function volunteerMessageEmail(params: { name: string; subject: string; inboxUrl: string }): MailMessage {
+  const html = layout(
+    'You have a new message',
+    `<p>Hello ${escapeHtml(params.name)},</p>
+     <p>The MMPraise volunteer team has sent you a message:</p>
+     <p style="background:#fff1ea;border:1px solid #ffd3c2;border-radius:10px;padding:12px 16px;">
+       <strong>${escapeHtml(params.subject)}</strong>
+     </p>
+     <p>Sign in to read it in your dashboard inbox.</p>
+     ${button(params.inboxUrl, 'Read your message')}`,
+  )
+  return {
+    to: '',
+    subject: `New message from the MMPraise volunteer team — ${params.subject}`,
+    html,
+    text: `Hello ${params.name},\n\nThe MMPraise volunteer team has sent you a message:\n\n${params.subject}\n\nSign in to read it in your dashboard inbox: ${params.inboxUrl}`,
+  }
+}
+
+/**
  * Invitation to someone whose details were migrated from a previous edition.
  *
  * Contains no password, no reset token and no profile data beyond the person's

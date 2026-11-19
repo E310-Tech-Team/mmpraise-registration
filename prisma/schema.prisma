@@ -302,6 +302,8 @@ model User {
   outreachAttempts       OutreachAttempt[]       @relation("OutreachAttempts")
   contactLogs            ParticipantContactLog[] @relation("ContactLogSubject")
   contactLogsAuthored    ParticipantContactLog[] @relation("ContactLogAuthor")
+  volunteerMessagesSent  VolunteerMessage[]      @relation("VolunteerMessageSender")
+  volunteerMessages      VolunteerMessageRecipient[] @relation("VolunteerMessageRecipient")
 
   @@index([createdAt])
   // Response-stage and reminder-eligibility scans over ~14k imported people.
@@ -1135,6 +1137,60 @@ model AnnouncementRevision {
  * is "did it go out, and how many failed?", not "what happened to each
  * address". Failures keep their addresses so they can be retried.
  */
+/**
+ * A direct message from the volunteer team to one or more volunteers, read in
+ * the volunteer's dashboard inbox (/dashboard/messages).
+ *
+ * Announcements broadcast to an audience and are not tracked per person; a
+ * direct message has a row per recipient so each volunteer's read state is
+ * known. One-way: volunteers read, they do not reply here.
+ */
+model VolunteerMessage {
+  id      String @id @default(cuid())
+  subject String
+  body    String
+
+  senderId String?
+
+  /** How the recipients were chosen: one person, or the applicant-list filters. */
+  audience String // 'individual' | 'filter'
+  /** The applicant-list filters used, so "who was this sent to?" stays answerable. */
+  filters  Json?
+  recipientCount Int
+
+  /** Email notice ("you have a new message") — opt-in per message. */
+  emailRequested   Boolean   @default(false)
+  emailSucceeded   Int       @default(0)
+  emailFailed      Int       @default(0)
+  /** Addresses the provider rejected, kept so they can be chased. */
+  emailFailures    Json?
+  emailCompletedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  sender     User?                       @relation("VolunteerMessageSender", fields: [senderId], references: [id], onDelete: SetNull)
+  recipients VolunteerMessageRecipient[]
+
+  @@index([createdAt])
+  @@map("volunteer_messages")
+}
+
+/** One volunteer's copy of a direct message. Null `readAt` is what "unread" means. */
+model VolunteerMessageRecipient {
+  id        String    @id @default(cuid())
+  messageId String
+  userId    String
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  message VolunteerMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User             @relation("VolunteerMessageRecipient", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, readAt])
+  @@map("volunteer_message_recipients")
+}
+
 model AnnouncementDelivery {
   id             String   @id @default(cuid())
   announcementId String
