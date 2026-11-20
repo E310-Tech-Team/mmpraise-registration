@@ -89,7 +89,7 @@ Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose
 | Cloudflare DNS `diaspora` A record → VPS (DNS only, like the apex) | **Done** (2026-11-18) |
 | Shared edge Caddy (`/opt/rcawards/deploy/Caddyfile`): add `diaspora.mmpraise.org` to the `mmpraise.org` site block, reload | **Done** (2026-11-18; same change raised the edge body cap 8 MB → 14 MB, just above the app's 13 MB) |
 
-### Diaspora form revisions (2026-11-20)
+### Diaspora form revisions (2026-11-20) — live 2026-11-20 (PR #18)
 
 | Part | Status |
 |---|---|
@@ -99,6 +99,7 @@ Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose
 | One response per responder email per edition — server check plus unique index, migration `20261120120000_diaspora_responder_email` | **Done** |
 | Section-segmented progress, "Next: <section>", review grouped by section (Mobbin / 21st.dev references in 04-UI-UX-Design-Brief §5) | **Done** |
 | Responder email column in the admin CSV | **Done** |
+| Split-screen layout on wide screens: full-height panel (Ken Burns photo, drifting glows, world map, live section tracker) beside the form; directional question transitions and a confirmation pop — GSAP via `src/lib/motion.ts`, nothing moves under reduced motion | **Done** |
 
 ### Direct messages to volunteers (2026-11-19)
 
