@@ -6,6 +6,7 @@ import { submitDiasporaAction } from '@/app/diaspora/actions'
 import { Alert, Button } from '@/components/ui/primitives'
 import { SelectInput, TextInput } from '@/components/ui/form'
 import { WhatsAppInput, type DialCountry } from '@/components/diaspora/whatsapp-input'
+import { gsap, prefersReducedMotion } from '@/lib/motion'
 import {
   DIASPORA_META,
   DIASPORA_QUESTIONS,
@@ -32,6 +33,9 @@ import {
  * pastor can come back on the same device. The draft is cleared on success.
  */
 type Stage = 'welcome' | 'question' | 'review' | 'confirmed'
+
+/** Where the person is, for the page's section tracker. */
+export type DiasporaProgress = { stage: Stage; sectionIndex: number }
 type PhoneParts = { iso: string; local: string; isoChosen?: boolean }
 type Draft = { answers: DiasporaAnswers; phones: Partial<Record<DiasporaField, PhoneParts>> }
 
@@ -58,7 +62,13 @@ function writeDraft(draft: Draft | null) {
   }
 }
 
-export function DiasporaForm({ countries }: { countries: DialCountry[] }) {
+export function DiasporaForm({
+  countries,
+  onProgress,
+}: {
+  countries: DialCountry[]
+  onProgress?: (progress: DiasporaProgress) => void
+}) {
   const [stage, setStage] = useState<Stage>('welcome')
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState<DiasporaAnswers>({})
@@ -70,6 +80,8 @@ export function DiasporaForm({ countries }: { countries: DialCountry[] }) {
   const [website, setWebsite] = useState('')
   const [pending, startTransition] = useTransition()
   const headingRef = useRef<HTMLHeadingElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
+  const directionRef = useRef<1 | -1>(1)
 
   const question = DIASPORA_QUESTIONS[step]
   const dialCode = (iso: string) => countries.find((c) => c.iso2 === iso)?.phoneCode ?? ''
@@ -84,6 +96,28 @@ export function DiasporaForm({ countries }: { countries: DialCountry[] }) {
       setHasDraft(true)
     }
   }, [])
+
+  useEffect(() => {
+    const section = DIASPORA_QUESTIONS[step]?.section
+    onProgress?.({ stage, sectionIndex: section ? DIASPORA_SECTIONS.indexOf(section) : 0 })
+  }, [stage, step, onProgress])
+
+  // Each new screen slides in from the side the person is travelling towards,
+  // and the confirmation tick pops. Nothing moves under reduced motion.
+  useEffect(() => {
+    const element = stageRef.current
+    if (!element || prefersReducedMotion()) return
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        element,
+        { opacity: 0, x: 28 * directionRef.current },
+        { opacity: 1, x: 0, duration: 0.45, ease: 'power3.out', clearProps: 'transform' },
+      )
+      const tick = element.querySelector('[data-pop]')
+      if (tick) gsap.fromTo(tick, { scale: 0.4, rotate: -20 }, { scale: 1, rotate: 0, duration: 0.6, ease: 'back.out(2.2)', delay: 0.15 })
+    }, element)
+    return () => ctx.revert()
+  }, [stage, step])
 
   // Move focus with the person: to the field on a question, to the heading elsewhere.
   useEffect(() => {
@@ -124,6 +158,9 @@ export function DiasporaForm({ countries }: { countries: DialCountry[] }) {
   }
 
   function goTo(nextStage: Stage, nextStep = step) {
+    const order = (target: Stage, at: number) =>
+      target === 'welcome' ? -1 : target === 'question' ? at : target === 'review' ? TOTAL : TOTAL + 1
+    directionRef.current = order(nextStage, nextStep) >= order(stage, step) ? 1 : -1
     setFieldError(null)
     setStep(nextStep)
     setStage(nextStage)
@@ -232,6 +269,7 @@ export function DiasporaForm({ countries }: { countries: DialCountry[] }) {
         />
       </div>
 
+      <div ref={stageRef}>
       {stage === 'welcome' && (
         <section aria-labelledby="diaspora-title" className="space-y-6">
           <h1 id="diaspora-title" className="font-display text-3xl font-bold uppercase leading-tight text-ink sm:text-4xl">
@@ -427,7 +465,7 @@ export function DiasporaForm({ countries }: { countries: DialCountry[] }) {
 
       {stage === 'confirmed' && (
         <section aria-labelledby="diaspora-confirmed" className="space-y-6">
-          <span className="flex size-12 items-center justify-center rounded-card bg-success-subtle text-success">
+          <span data-pop className="flex size-12 items-center justify-center rounded-card bg-success-subtle text-success">
             <Check aria-hidden className="size-6" />
           </span>
           <div className="space-y-3">
@@ -452,6 +490,7 @@ export function DiasporaForm({ countries }: { countries: DialCountry[] }) {
           </div>
         </section>
       )}
+      </div>
     </div>
   )
 }
