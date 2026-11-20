@@ -1,6 +1,7 @@
 import 'server-only'
 import { randomInt } from 'node:crypto'
 import { db } from '@/lib/db'
+import { isUniqueViolation } from '@/lib/db-errors'
 import type { Prisma } from '@/generated/prisma/client'
 import type { DiasporaSubmissionInput } from '@/lib/validation/diaspora'
 
@@ -25,7 +26,25 @@ export function generateReference(): string {
 }
 
 function isReferenceCollision(error: unknown): boolean {
-  return (error as { code?: string } | null)?.code === 'P2002'
+  return isUniqueViolation(error, 'reference')
+}
+
+/** True when this error is the one-response-per-responder rule refusing a second response. */
+export function isDuplicateResponder(error: unknown): boolean {
+  return isUniqueViolation(error, 'responderEmailKey')
+}
+
+export function responderKey(email: string): string {
+  return email.trim().toLowerCase()
+}
+
+/** Has this responder email already submitted for this edition? */
+export async function hasResponded(edition: string, email: string): Promise<boolean> {
+  const existing = await db.diasporaSubmission.findUnique({
+    where: { edition_responderEmailKey: { edition, responderEmailKey: responderKey(email) } },
+    select: { id: true },
+  })
+  return existing !== null
 }
 
 /** Store one response. Returns its reference, retrying on the rare collision. */
@@ -49,6 +68,8 @@ export async function createDiasporaSubmission(
     repEmail: data.repEmail,
     repPhone: data.repPhone,
     centreEmailKey: data.centreOfficialEmail.trim().toLowerCase(),
+    responderEmail: data.responderEmail,
+    responderEmailKey: responderKey(data.responderEmail),
     ip: context.ip,
     userAgent: context.userAgent,
   }

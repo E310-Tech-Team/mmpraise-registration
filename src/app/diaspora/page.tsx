@@ -23,7 +23,8 @@ export default async function DiasporaPage() {
   // The country list comes from the database, so this must render per request:
   // prerendered at build time it would carry the build database's empty list.
   await connection()
-  const countries = (await getCountries()).map((country) => country.name)
+  // Name for the answer, dial code for the WhatsApp fields, ISO code for the flag.
+  const countries = (await getCountries()).map(({ name, phoneCode, iso2 }) => ({ name, phoneCode, iso2 }))
 
   return (
     <div className="flex min-h-dvh flex-col bg-surface-sunken">

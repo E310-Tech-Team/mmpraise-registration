@@ -1823,12 +1823,23 @@ model DiasporaSubmission {
   /** Lower-cased centre email: the key repeat submissions are grouped on. */
   centreEmailKey String
 
+  /**
+   * The person who filled the form in, and gets a copy of it. Optional only
+   * because responses from before 2026-11-20 never asked; the form requires it.
+   */
+  responderEmail    String?
+  /** Lower-cased responder email. One response per responder per edition. */
+  responderEmailKey String?
+
   ip        String?
   userAgent String?
   createdAt DateTime @default(now())
 
   @@index([edition, createdAt])
   @@index([centreEmailKey])
+  // Postgres treats NULLs as distinct, so older responses without a responder
+  // email never collide; every new response is held to one per email.
+  @@unique([edition, responderEmailKey])
   @@map("diaspora_submissions")
 }
 

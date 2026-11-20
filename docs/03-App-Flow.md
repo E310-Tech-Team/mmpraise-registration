@@ -186,11 +186,12 @@ Limits: 5,000 recipients per message; email notices only up to 500 (sent inside 
 flowchart LR
   W[Welcome] --> Q[13 questions, one per screen<br/>draft kept in localStorage] --> R[Review<br/>edit any answer] --> S[submitDiasporaAction]
   S -->|rate limit 20/h/IP, honeypot,<br/>Zod + country list check| DB[(diaspora_submissions)]
-  S --> C[Confirmation: DSP- reference]
+  S -->|responder email already used this edition?<br/>refuse, back to that question| Q
+  S --> C[Confirmation: DSP- reference; copy emailed to the responder]
   DB --> A[/admin/diaspora — diaspora:view/] --> X[CSV download, audited]
 ```
 
-No account is involved. A centre that submits again is stored again, not refused; the admin list flags responses sharing a centre email (case-insensitive) as **Repeat ×n** for the same edition.
+No account is involved. **One response per responder email per edition** (2026-11-20): the last question asks for the responder's own email, a second response from it is refused (case-insensitive; enforced by a unique index), and the responder is emailed a copy of their answers. Different people from one centre can each respond, so the admin list still flags responses sharing a *centre* email as **Repeat ×n**. Choosing the country in question 1 sets the dial code of the three WhatsApp questions; a code changed by hand on one field is kept.
 
 ---
 

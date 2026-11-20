@@ -6,11 +6,10 @@ import { Badge, Card, CardBody, CardHeader } from '@/components/ui/primitives'
 import { requirePermission } from '@/lib/auth/rbac'
 import { db } from '@/lib/db'
 import { formatDate } from '@/lib/utils'
-import { DIASPORA_QUESTIONS, type DiasporaQuestion } from '@/lib/validation/diaspora'
+import { DIASPORA_QUESTIONS, DIASPORA_SECTIONS } from '@/lib/validation/diaspora'
 
 export const metadata: Metadata = { title: 'Diaspora response' }
 
-const SECTIONS: DiasporaQuestion['section'][] = ['Country & oversight', 'Participating centre', 'MMPraise representative']
 
 /** Every answer in one response, grouped as the form asked them. */
 export default async function DiasporaResponsePage({ params }: { params: Promise<{ id: string }> }) {
@@ -56,7 +55,7 @@ export default async function DiasporaResponsePage({ params }: { params: Promise
         </p>
       )}
 
-      {SECTIONS.map((section) => (
+      {DIASPORA_SECTIONS.map((section) => (
         <Card key={section}>
           <CardHeader title={section} />
           <CardBody>

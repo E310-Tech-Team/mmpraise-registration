@@ -215,6 +215,44 @@ export function volunteerMessageEmail(params: { name: string; subject: string; i
 }
 
 /**
+ * A copy of a diaspora participation response, sent to the person who filled it
+ * in — the address they typed themselves, so the answers go back to their own
+ * author and nowhere else.
+ */
+export function diasporaConfirmationEmail(params: {
+  reference: string
+  answers: { label: string; value: string }[]
+}): MailMessage {
+  const rows = params.answers
+    .map(
+      ({ label, value }) =>
+        `<tr><td style="padding:6px 12px 6px 0;color:#6b5f5c;vertical-align:top;">${escapeHtml(label)}</td><td style="padding:6px 0;color:#1c0d0a;font-weight:600;">${escapeHtml(value)}</td></tr>`,
+    )
+    .join('')
+
+  const html = layout(
+    'Participation affirmed',
+    `<p>Thank you for affirming your centre's participation in Marathon Messiah's Praise. Your response has been recorded.</p>
+     <p>Your reference: <strong>${escapeHtml(params.reference)}</strong></p>
+     <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;">${rows}</table>
+     <p>If anything here needs correcting, reply to this email or contact the volunteer team, quoting your reference.</p>`,
+  )
+  return {
+    to: '',
+    subject: `MMPraise diaspora participation — ${params.reference}`,
+    html,
+    text: [
+      "Thank you for affirming your centre's participation in Marathon Messiah's Praise.",
+      `Your reference: ${params.reference}`,
+      '',
+      ...params.answers.map(({ label, value }) => `${label}: ${value}`),
+      '',
+      'If anything here needs correcting, contact the volunteer team quoting your reference.',
+    ].join('\n'),
+  }
+}
+
+/**
  * Invitation to someone whose details were migrated from a previous edition.
  *
  * Contains no password, no reset token and no profile data beyond the person's
