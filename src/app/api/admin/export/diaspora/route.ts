@@ -33,6 +33,7 @@ const COLUMNS = [
   'MMPraise representative',
   'Representative email',
   'Representative phone',
+  'Responder email',
   'Responses from this centre email',
 ] as const
 
@@ -76,6 +77,7 @@ export async function GET(request: Request) {
     s.repName,
     s.repEmail,
     s.repPhone,
+    s.responderEmail ?? '',
     repeats.get(s.centreEmailKey) ?? 1,
   ])
 

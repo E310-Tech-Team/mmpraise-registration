@@ -52,7 +52,7 @@ Roles are defined in `prisma/schema.prisma` (`Role` enum) and mapped to explicit
 - **Dashboard**: nine-stage journey status, announcements, shifts, FAQs, resources, account management.
 - **Public pages**: homepage with countdown, About, Contact, legal (terms/privacy), testimony submission (moderated), newsletter signup, "attending" share card. All other destinations (Blog, Gallery, Magazine, Radio, Prayer Request, Give) render "Coming soon" behind `NEXT_PUBLIC_FEATURE_*` flags (`src/config/features.ts`). **Donations are off** at launch by client instruction.
 - **Messages inbox** (`/dashboard/messages`): direct messages from the volunteer team, with an unread badge in the header and the latest three on the dashboard. One-way; opening a message marks it read.
-- **Diaspora participation form** (diaspora.mmpraise.org): centres abroad affirm participation in 13 questions, no account needed; receipt reference on completion.
+- **Diaspora participation form** (diaspora.mmpraise.org): centres abroad affirm participation in 14 questions, all required, no account needed. WhatsApp numbers take their country code automatically from the chosen country; the responder gets an emailed copy with a receipt reference; one response per responder email per edition.
 
 ### Administration
 - **Applications**: search, filter, paginate; full application view including department answers; approve / waitlist / reject / bulk-approve (capped at 500, server re-count contract); shift assignment; internal notes; CSV/Excel export behind a confirmation dialog and audit entry.

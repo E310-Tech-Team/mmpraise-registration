@@ -68,6 +68,11 @@ Hand-rolled primitives over Radix, styled with the tokens above — see `src/com
 
 Button variants follow the reference: primary (solid primary orange, white text), ghost-on-dark (transparent, white border), ghost-on-light (transparent, ink border) — all pills, all uppercase display type.
 
+**Diaspora form patterns (2026-11-20), researched with the Mobbin and 21st.dev MCP servers.**
+- *Phone with country code* — Mobbin references (Revolut Business, Uber, Delphi, Zoom) all fuse the dial code into the field as a prefix rather than asking for it separately; 21st.dev's phone-input components follow the same shape. Built natively as `src/components/diaspora/whatsapp-input.tsx` (flag emoji + `+code` over a transparent native `<select>`, so the device's own picker and its accessibility are kept) rather than adding a component library: the project's primitives already cover the rest, and a second input system would fork the design.
+- *Progress through a long one-question form* — Airbnb, Turo and Klaviyo show the section, "step n of N" and a segmented bar; the diaspora form uses one segment per section, "Question n of 14" and "Next: <section>" on the last question of each.
+- *State why a field is asked, next to it* — the WhatsApp hint sits above each number field, as the references place the purpose line above the input.
+
 ## 6. UX principles observed in the build
 
 1. **Short steps, never a wall**: the eight-step wizard replaces one long form; each step is one topic; progress is autosaved and shown (`ProgressSteps`).

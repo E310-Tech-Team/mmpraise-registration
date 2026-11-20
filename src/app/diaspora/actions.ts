@@ -5,10 +5,12 @@ import { eventConfig } from '@/config/site'
 import { audit } from '@/lib/audit'
 import { clientIp } from '@/lib/auth/session'
 import { fail, ok, parseOrFail, type ActionResult } from '@/lib/actions/result'
-import { createDiasporaSubmission } from '@/lib/diaspora/service'
+import { createDiasporaSubmission, hasResponded, isDuplicateResponder } from '@/lib/diaspora/service'
+import { sendMailSafely } from '@/lib/mail/mailer'
+import { diasporaConfirmationEmail } from '@/lib/mail/templates'
 import { getCountries } from '@/lib/reference'
 import { ipKey, rateLimit } from '@/lib/security/rate-limit'
-import { diasporaSchema } from '@/lib/validation/diaspora'
+import { DIASPORA_QUESTIONS, diasporaSchema } from '@/lib/validation/diaspora'
 
 /**
  * The public diaspora participation form.
@@ -22,6 +24,9 @@ import { diasporaSchema } from '@/lib/validation/diaspora'
  * from the same office connection in one sitting.
  */
 const SUBMISSIONS_PER_HOUR = 20
+
+const ALREADY_RESPONDED =
+  'A response has already been submitted with this email address. If something needs to change, please contact the volunteer team.'
 
 export async function submitDiasporaAction(input: unknown): Promise<ActionResult<{ reference: string }>> {
   const limit = await rateLimit(await ipKey('diaspora'), SUBMISSIONS_PER_HOUR, 60)
@@ -45,11 +50,34 @@ export async function submitDiasporaAction(input: unknown): Promise<ActionResult
     return fail('Select a country from the list', { country: 'Select a country from the list' })
   }
 
+  // One response per responder email per edition. Checked here for a clear
+  // answer, and enforced by a unique index for two submissions that race.
+  if (await hasResponded(eventConfig.edition, data.responderEmail)) {
+    return fail(ALREADY_RESPONDED, { responderEmail: ALREADY_RESPONDED }, 'already_responded')
+  }
+
   const headerList = await headers()
-  const created = await createDiasporaSubmission(data, {
-    edition: eventConfig.edition,
-    ip: clientIp(headerList),
-    userAgent: headerList.get('user-agent')?.slice(0, 500) ?? null,
+  let created: { id: string; reference: string }
+  try {
+    created = await createDiasporaSubmission(data, {
+      edition: eventConfig.edition,
+      ip: clientIp(headerList),
+      userAgent: headerList.get('user-agent')?.slice(0, 500) ?? null,
+    })
+  } catch (error) {
+    if (isDuplicateResponder(error)) {
+      return fail(ALREADY_RESPONDED, { responderEmail: ALREADY_RESPONDED }, 'already_responded')
+    }
+    throw error
+  }
+
+  // The copy is a courtesy: the response is stored whether or not it sends.
+  await sendMailSafely({
+    ...diasporaConfirmationEmail({
+      reference: created.reference,
+      answers: DIASPORA_QUESTIONS.map((q) => ({ label: q.label, value: String(data[q.id] ?? '') })),
+    }),
+    to: data.responderEmail,
   })
 
   await audit({

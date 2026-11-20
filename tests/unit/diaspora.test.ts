@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest'
 import nextConfig from '../../next.config'
 import { can, effectivePermissions } from '@/lib/auth/rbac'
 import { generateReference } from '@/lib/diaspora/service'
+import { diasporaConfirmationEmail } from '@/lib/mail/templates'
 import {
   DIASPORA_QUESTIONS,
   diasporaSchema,
   firstInvalidQuestion,
+  flagEmoji,
+  joinWhatsApp,
   validateDiasporaAnswer,
   type DiasporaAnswers,
 } from '@/lib/validation/diaspora'
@@ -16,59 +19,104 @@ const complete: Required<DiasporaAnswers> = {
   country: 'United Kingdom',
   countryPastorName: 'Pastor (Dr.) Ade Johnson',
   countryPastorEmail: 'Pastor@Example.org',
-  countryPastorPhone: '',
+  countryPastorPhone: '+44 7700900077',
   continentalOverseer: 'Pastor Femi Ola',
   centreNameAndLocation: 'RCCG City of Grace, Manchester',
   centreOfficialEmail: 'centre@example.org',
-  picName: '',
-  picEmail: '',
-  picPhone: '',
+  picName: 'Pastor Tunde Bello',
+  picEmail: 'pic@example.org',
+  picPhone: '+44 7700900078',
   repName: 'Grace Adeyemi',
   repEmail: 'grace@example.org',
-  repPhone: '+44 7700 900077',
+  repPhone: '+44 7700900079',
+  responderEmail: 'Responder@Example.org',
 }
 
 describe('diaspora form validation', () => {
-  it('accepts a complete response with the optional answers left blank', () => {
+  it('accepts a complete response and normalises emails and WhatsApp numbers', () => {
     const parsed = diasporaSchema.safeParse(complete)
     expect(parsed.success).toBe(true)
-    // Emails are normalised the same way as everywhere else in the app.
     expect(parsed.data?.countryPastorEmail).toBe('pastor@example.org')
+    expect(parsed.data?.responderEmail).toBe('responder@example.org')
+    expect(parsed.data?.repPhone).toBe('+447700900079')
+  })
+
+  it('requires every question, including the ones that used to be optional', () => {
+    for (const question of DIASPORA_QUESTIONS) {
+      expect(validateDiasporaAnswer(question.id, ''), question.id).toBe('This field is required')
+    }
+  })
+
+  it('asks for the responder email last, in its own section', () => {
+    const last = DIASPORA_QUESTIONS[DIASPORA_QUESTIONS.length - 1]
+    expect(last?.id).toBe('responderEmail')
+    expect(last?.section).toBe('Your Details')
+  })
+
+  it('labels every question in Title Case', () => {
+    const small = new Set(['of', 'the', 'and', 'for', 'in'])
+    for (const question of DIASPORA_QUESTIONS) {
+      for (const word of question.label.replace(/[()]/g, '').split(' ')) {
+        if (small.has(word)) continue
+        expect(word[0], `${question.id}: ${word}`).toBe(word[0]?.toUpperCase())
+      }
+    }
+  })
+
+  it('tells people every number is a WhatsApp number', () => {
+    for (const question of DIASPORA_QUESTIONS.filter((q) => q.type === 'whatsapp')) {
+      expect(question.label, question.id).toContain('WhatsApp')
+      expect(question.hint, question.id).toMatch(/WhatsApp/)
+    }
+  })
+
+  it('accepts international WhatsApp numbers and refuses ones without a country code', () => {
+    for (const phone of ['+44 7700 900077', '+1-202-555-0143', '+234 803 123 4567']) {
+      expect(validateDiasporaAnswer('repPhone', phone), phone).toBeNull()
+    }
+    for (const phone of ['07700900077', 'call me', '+44 12']) {
+      expect(validateDiasporaAnswer('repPhone', phone), phone).not.toBeNull()
+    }
   })
 
   it('accepts titles and punctuation in names, unlike the volunteer name rule', () => {
     expect(validateDiasporaAnswer('countryPastorName', 'Pastor (Dr.) Ade Johnson')).toBeNull()
   })
 
-  it('accepts international phone numbers as people actually write them', () => {
-    for (const phone of ['+44 7700 900077', '(0)20 7946 0018', '+1-202-555-0143', '07700900077']) {
-      expect(validateDiasporaAnswer('repPhone', phone), phone).toBeNull()
-    }
-    expect(validateDiasporaAnswer('repPhone', 'call me')).not.toBeNull()
-  })
-
-  it('requires every question the original form required', () => {
-    for (const question of DIASPORA_QUESTIONS) {
-      const error = validateDiasporaAnswer(question.id, '')
-      if (question.required) expect(error, question.id).toBe('This field is required')
-      else expect(error, question.id).toBeNull()
-    }
-  })
-
-  it('rejects malformed email addresses, including optional ones that are filled in', () => {
-    expect(validateDiasporaAnswer('centreOfficialEmail', 'not-an-email')).not.toBeNull()
-    expect(validateDiasporaAnswer('picEmail', 'not-an-email')).not.toBeNull()
-    expect(validateDiasporaAnswer('picEmail', '')).toBeNull()
-  })
-
   it('points the person at the first question that still needs an answer', () => {
     expect(firstInvalidQuestion(complete)).toBe(-1)
-    const missingRep = { ...complete, repName: '' }
-    expect(DIASPORA_QUESTIONS[firstInvalidQuestion(missingRep)]?.id).toBe('repName')
+    expect(DIASPORA_QUESTIONS[firstInvalidQuestion({ ...complete, picEmail: '' })]?.id).toBe('picEmail')
   })
 
   it('caps free text so one field cannot carry an essay', () => {
     expect(validateDiasporaAnswer('centreNameAndLocation', 'x'.repeat(201))).not.toBeNull()
+  })
+})
+
+describe('WhatsApp number helpers', () => {
+  it('joins the country code and local number, dropping a leading trunk zero', () => {
+    expect(joinWhatsApp('44', '07700 900077')).toBe('+44 7700900077')
+    expect(joinWhatsApp('234', '803-123-4567')).toBe('+234 8031234567')
+    expect(joinWhatsApp('44', '')).toBe('')
+  })
+
+  it('turns a country code into its flag, and ignores nonsense', () => {
+    expect(flagEmoji('GB')).toBe('🇬🇧')
+    expect(flagEmoji('ng')).toBe('🇳🇬')
+    expect(flagEmoji('')).toBe('')
+    expect(flagEmoji('GBR')).toBe('')
+  })
+})
+
+describe('diasporaConfirmationEmail', () => {
+  it('sends the responder their answers and reference, escaped', () => {
+    const email = diasporaConfirmationEmail({
+      reference: 'DSP-ABC234',
+      answers: [{ label: 'Name of Country', value: '<b>United Kingdom</b>' }],
+    })
+    expect(email.subject).toContain('DSP-ABC234')
+    expect(email.text).toContain('Name of Country: <b>United Kingdom</b>')
+    expect(email.html).not.toContain('<b>United Kingdom</b>')
   })
 })
 
