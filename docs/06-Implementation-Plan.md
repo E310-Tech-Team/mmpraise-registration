@@ -101,6 +101,8 @@ Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose
 | Tests: unit (schema, filter whitelist, email content), integration (scoping incl. department heads, read tracking, own-copy-only) | **Done** |
 | Replies / two-way conversations | **Not done** — one-way by decision; volunteers are pointed to the contact page |
 | Email notices above 500 recipients | **Not done** — would need the queued, chunked sending the outreach subsystem uses |
+| Communication Officers can choose recipients: Applicants list and application pages open **view-only** for any of `application:review` / `view_all` / `view_department` (`requireApplicantViewer`); status controls stay behind `application:review` (PR #15) | **Done** (live 2026-11-19) |
+| "Admin" lands every administrator on a section they can open: `/admin` redirects non-reviewers to their first nav section (Applicants for Communication Officers); nav moved to `components/admin/admin-nav.ts` (PR #16) | **Done** (live 2026-11-19) |
 
 ## 3. What remains before launch
 
