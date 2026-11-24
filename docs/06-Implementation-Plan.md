@@ -99,8 +99,8 @@ Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose
 | One response per responder email per edition — server check plus unique index, migration `20261120120000_diaspora_responder_email` | **Done** |
 | Section-segmented progress, "Next: <section>", review grouped by section (Mobbin / 21st.dev references in 04-UI-UX-Design-Brief §5) | **Done** |
 | Responder email column in the admin CSV | **Done** |
-| Welcome and confirmation wording updated to the owner's copy ("Dearly Beloved", "Participation Confirmed"), "Submit another centre" restored (2026-11-24) | **Done** |
-| Split-screen layout on wide screens: full-height panel (Ken Burns photo, drifting glows, world map, live section tracker) beside the form; directional question transitions and a confirmation pop — GSAP via `src/lib/motion.ts`, nothing moves under reduced motion | **Done** |
+| Split-screen layout on wide screens: full-height panel (Ken Burns photo, drifting glows, world map, live section tracker) beside the form; directional question transitions and a confirmation pop — GSAP via `src/lib/motion.ts`, nothing moves under reduced motion | **Done** — live (PR #19) |
+| Welcome and confirmation wording updated to the owner's copy ("Dearly Beloved", "Participation Confirmed"), "Submit another centre" restored | **Done** — live 2026-11-24 (PR #20) |
 
 ### Direct messages to volunteers (2026-11-19)
 
