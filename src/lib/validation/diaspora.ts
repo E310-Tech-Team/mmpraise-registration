@@ -13,10 +13,16 @@ import { emailSchema, trimmedText } from './common'
 
 export const DIASPORA_META = {
   title: 'MMPraise Global Participation (Diaspora)',
-  salutation: 'Dear Highly Esteemed,',
-  intro:
-    "We appreciate your willingness to be a part of this edition of Marathon Messiah's Praise. Kindly fill the form below to affirm your participation.",
-  confirmationMessage: 'Thank you for your time. Your response has been recorded. Blessings!',
+  salutation: 'Dearly Beloved,',
+  intro: [
+    "We appreciate your willingness to be a part of this edition of Marathon Messiah's Praise.",
+    'Kindly fill out the form below to confirm your participation.',
+  ],
+  confirmedTitle: 'Participation Confirmed',
+  confirmationMessage: [
+    'Thank you for taking the time to participate. Your response has been received successfully.',
+    'God bless you!',
+  ],
 } as const
 
 const REQUIRED = 'This field is required'

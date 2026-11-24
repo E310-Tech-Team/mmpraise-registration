@@ -231,8 +231,8 @@ export function diasporaConfirmationEmail(params: {
     .join('')
 
   const html = layout(
-    'Participation affirmed',
-    `<p>Thank you for affirming your centre's participation in Marathon Messiah's Praise. Your response has been recorded.</p>
+    'Participation confirmed',
+    `<p>Thank you for taking the time to participate in Marathon Messiah's Praise. Your response has been received successfully.</p>
      <p>Your reference: <strong>${escapeHtml(params.reference)}</strong></p>
      <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;">${rows}</table>
      <p>If anything here needs correcting, reply to this email or contact the volunteer team, quoting your reference.</p>`,
@@ -242,7 +242,7 @@ export function diasporaConfirmationEmail(params: {
     subject: `MMPraise diaspora participation — ${params.reference}`,
     html,
     text: [
-      "Thank you for affirming your centre's participation in Marathon Messiah's Praise.",
+      "Thank you for taking the time to participate in Marathon Messiah's Praise. Your response has been received successfully.",
       `Your reference: ${params.reference}`,
       '',
       ...params.answers.map(({ label, value }) => `${label}: ${value}`),

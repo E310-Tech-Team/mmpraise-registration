@@ -277,7 +277,9 @@ export function DiasporaForm({
           </h1>
           <div className="max-w-prose space-y-3 text-base leading-relaxed text-body">
             <p className="font-semibold text-ink">{DIASPORA_META.salutation}</p>
-            <p>{DIASPORA_META.intro}</p>
+            {DIASPORA_META.intro.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
           </div>
           <ol className="grid gap-2 text-sm text-body sm:grid-cols-2">
             {DIASPORA_SECTIONS.map((section, index) => (
@@ -475,9 +477,13 @@ export function DiasporaForm({
               tabIndex={-1}
               className="font-display text-3xl font-bold uppercase text-ink focus:outline-none sm:text-4xl"
             >
-              Participation Affirmed
+              {DIASPORA_META.confirmedTitle}
             </h1>
-            <p className="max-w-prose text-base leading-relaxed text-body">{DIASPORA_META.confirmationMessage}</p>
+            {DIASPORA_META.confirmationMessage.map((line) => (
+              <p key={line} className="max-w-prose text-base leading-relaxed text-body">
+                {line}
+              </p>
+            ))}
             {reference && (
               <p className="text-sm text-muted">
                 Your reference: <span className="font-semibold tabular-nums text-ink">{reference}</span>
@@ -488,6 +494,10 @@ export function DiasporaForm({
               <strong className="break-all">{answers.responderEmail}</strong>.
             </p>
           </div>
+          {/* Another centre is someone else's response: a fresh form, and a different responder email. */}
+          <Button variant="outline" onClick={startOver}>
+            Submit another centre <ArrowRight aria-hidden className="size-4" />
+          </Button>
         </section>
       )}
       </div>

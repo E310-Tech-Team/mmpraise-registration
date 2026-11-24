@@ -100,7 +100,7 @@ export function DiasporaExperience({ countries, editionName }: { countries: Dial
               Many nations.
             </h2>
             <p data-intro className="max-w-sm text-base leading-relaxed text-white/80">
-              Affirm your centre&apos;s participation in Marathon Messiah&apos;s Praise, wherever in the world you
+              Confirm your centre&apos;s participation in Marathon Messiah&apos;s Praise, wherever in the world you
               gather.
             </p>
           </div>
