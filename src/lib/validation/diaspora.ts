@@ -23,6 +23,8 @@ export const DIASPORA_META = {
     'Thank you for taking the time to participate. Your response has been received successfully.',
     'God bless you!',
   ],
+  alreadyResponded:
+    'A response has already been submitted with this email address. If something needs to change, please reply to your confirmation email.',
 } as const
 
 const REQUIRED = 'This field is required'

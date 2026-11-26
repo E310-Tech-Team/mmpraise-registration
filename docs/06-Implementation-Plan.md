@@ -101,6 +101,7 @@ Replaces the separate `adecrown0/mmpraise-form` app (a Google Form re-skin whose
 | Responder email column in the admin CSV | **Done** |
 | Split-screen layout on wide screens: full-height panel (Ken Burns photo, drifting glows, world map, live section tracker) beside the form; directional question transitions and a confirmation pop — GSAP via `src/lib/motion.ts`, nothing moves under reduced motion | **Done** — live (PR #19) |
 | Welcome and confirmation wording updated to the owner's copy ("Dearly Beloved", "Participation Confirmed"), "Submit another centre" restored | **Done** — live 2026-11-24 (PR #20) |
+| No "volunteer" in anything a diaspora respondent sees: duplicate-email message, and the confirmation email's banner ("MMPraise Diaspora"), body, footer and sender name; guarded by unit tests. Optional `DIASPORA_MAIL_FROM` / `DIASPORA_REPLY_TO` give it its own address (2026-11-26) | **Done** |
 
 ### Direct messages to volunteers (2026-11-19)
 

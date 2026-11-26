@@ -10,7 +10,7 @@ import { sendMailSafely } from '@/lib/mail/mailer'
 import { diasporaConfirmationEmail } from '@/lib/mail/templates'
 import { getCountries } from '@/lib/reference'
 import { ipKey, rateLimit } from '@/lib/security/rate-limit'
-import { DIASPORA_QUESTIONS, diasporaSchema } from '@/lib/validation/diaspora'
+import { DIASPORA_META, DIASPORA_QUESTIONS, diasporaSchema } from '@/lib/validation/diaspora'
 
 /**
  * The public diaspora participation form.
@@ -25,8 +25,7 @@ import { DIASPORA_QUESTIONS, diasporaSchema } from '@/lib/validation/diaspora'
  */
 const SUBMISSIONS_PER_HOUR = 20
 
-const ALREADY_RESPONDED =
-  'A response has already been submitted with this email address. If something needs to change, please contact the volunteer team.'
+const ALREADY_RESPONDED = DIASPORA_META.alreadyResponded
 
 export async function submitDiasporaAction(input: unknown): Promise<ActionResult<{ reference: string }>> {
   const limit = await rateLimit(await ipKey('diaspora'), SUBMISSIONS_PER_HOUR, 60)

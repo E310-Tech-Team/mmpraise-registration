@@ -48,6 +48,12 @@ const schema = z.object({
   SMTP_PASSWORD: z.string().optional(),
   MAIL_FROM: z.string().default('MMPraise Volunteers <volunteers@mmpraise.org>'),
   SUPPORT_EMAIL: z.string().default('volunteers@mmpraise.org'),
+  /**
+   * Sender and reply-to for diaspora mail, which must never say "volunteer".
+   * Unset, the sender keeps MAIL_FROM's address under the name "MMPraise Diaspora".
+   */
+  DIASPORA_MAIL_FROM: z.string().optional(),
+  DIASPORA_REPLY_TO: z.string().optional(),
 
   RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(5),
   RATE_LIMIT_LOGIN_WINDOW_MIN: z.coerce.number().int().positive().default(15),

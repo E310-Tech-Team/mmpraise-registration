@@ -17,6 +17,8 @@ export type MailMessage = {
   subject: string
   html: string
   text: string
+  /** Overrides MAIL_FROM — diaspora mail sends under its own name. */
+  from?: string
   replyTo?: string
 }
 
@@ -53,7 +55,7 @@ export async function sendMail(message: MailMessage): Promise<{ delivered: boole
   }
 
   await transport.sendMail({
-    from: env.MAIL_FROM,
+    from: message.from ?? env.MAIL_FROM,
     to: message.to,
     subject: message.subject,
     html: message.html,
