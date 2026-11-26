@@ -24,22 +24,43 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
-function layout(heading: string, bodyHtml: string): string {
+/** The header and footer an email carries; volunteer mail is the default. */
+type MailBrand = { label: string; footerHtml: string }
+
+const VOLUNTEER_BRAND: MailBrand = {
+  label: 'MMPraise Volunteers',
+  footerHtml: `Need help? Contact <a href="mailto:${env.SUPPORT_EMAIL}" style="color:${BRAND};">${env.SUPPORT_EMAIL}</a>.<br>
+      ${escapeHtml(env.APP_NAME)}`,
+}
+
+/** Diaspora centres are not volunteers: their mail never says so. */
+const DIASPORA_BRAND: MailBrand = {
+  label: 'MMPraise Diaspora',
+  footerHtml: "Questions? Simply reply to this email.<br>\n      MMPraise · Marathon Messiah&#39;s Praise",
+}
+
+/** "MMPraise Diaspora <address>" — MAIL_FROM's address under the diaspora name, unless configured. */
+function diasporaSender(): string {
+  if (env.DIASPORA_MAIL_FROM) return env.DIASPORA_MAIL_FROM
+  const address = /<([^>]+)>/.exec(env.MAIL_FROM)?.[1] ?? env.MAIL_FROM
+  return `MMPraise Diaspora <${address}>`
+}
+
+function layout(heading: string, bodyHtml: string, brand: MailBrand = VOLUNTEER_BRAND): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(heading)}</title></head>
 <body style="margin:0;padding:24px;background:#faf7f5;font-family:Helvetica,Arial,sans-serif;color:${BODY};line-height:1.6;">
   <div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e5d7d1;border-radius:14px;overflow:hidden;">
     <div style="background:${INK};padding:20px 28px;">
-      <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">MMPraise Volunteers</span>
+      <span style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;">${escapeHtml(brand.label)}</span>
     </div>
     <div style="padding:28px;">
       <h1 style="margin:0 0 16px;font-size:22px;line-height:1.25;color:${INK};text-transform:uppercase;">${escapeHtml(heading)}</h1>
       ${bodyHtml}
     </div>
     <div style="padding:18px 28px;border-top:1px solid #e5d7d1;font-size:13px;color:#5a5a5a;">
-      Need help? Contact <a href="mailto:${env.SUPPORT_EMAIL}" style="color:${BRAND};">${env.SUPPORT_EMAIL}</a>.<br>
-      ${escapeHtml(env.APP_NAME)}
+      ${brand.footerHtml}
     </div>
   </div>
 </body></html>`
@@ -235,10 +256,13 @@ export function diasporaConfirmationEmail(params: {
     `<p>Thank you for taking the time to participate in Marathon Messiah's Praise. Your response has been received successfully.</p>
      <p>Your reference: <strong>${escapeHtml(params.reference)}</strong></p>
      <table role="presentation" style="width:100%;border-collapse:collapse;font-size:14px;">${rows}</table>
-     <p>If anything here needs correcting, reply to this email or contact the volunteer team, quoting your reference.</p>`,
+     <p>If anything here needs correcting, reply to this email quoting your reference.</p>`,
+    DIASPORA_BRAND,
   )
   return {
     to: '',
+    from: diasporaSender(),
+    ...(env.DIASPORA_REPLY_TO ? { replyTo: env.DIASPORA_REPLY_TO } : {}),
     subject: `MMPraise diaspora participation — ${params.reference}`,
     html,
     text: [
@@ -247,7 +271,9 @@ export function diasporaConfirmationEmail(params: {
       '',
       ...params.answers.map(({ label, value }) => `${label}: ${value}`),
       '',
-      'If anything here needs correcting, contact the volunteer team quoting your reference.',
+      'If anything here needs correcting, reply to this email quoting your reference.',
+      '',
+      "MMPraise · Marathon Messiah's Praise",
     ].join('\n'),
   }
 }

@@ -120,6 +120,9 @@ SMTP_USER=resend
 SMTP_PASSWORD=<the Resend API key>
 MAIL_FROM=MMPraise Volunteers <volunteers@mmpraise.org>
 SUPPORT_EMAIL=volunteers@mmpraise.org
+# Optional: diaspora mail never says "volunteer". Unset, it sends from the MAIL_FROM address as "MMPraise Diaspora".
+# DIASPORA_MAIL_FROM=MMPraise Diaspora <diaspora@mmpraise.org>
+# DIASPORA_REPLY_TO=diaspora@mmpraise.org
 ```
 
 The backup recipe runs against the container:

@@ -14,7 +14,7 @@ import { DIASPORA_META } from '@/lib/validation/diaspora'
  */
 export const metadata: Metadata = {
   title: { absolute: DIASPORA_META.title },
-  description: "Affirm your centre's participation in Marathon Messiah's Praise from the diaspora.",
+  description: "Confirm your centre's participation in Marathon Messiah's Praise from the diaspora.",
   alternates: { canonical: 'https://diaspora.mmpraise.org' },
 }
 

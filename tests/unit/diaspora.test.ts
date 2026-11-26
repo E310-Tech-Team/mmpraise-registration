@@ -4,6 +4,7 @@ import { can, effectivePermissions } from '@/lib/auth/rbac'
 import { generateReference } from '@/lib/diaspora/service'
 import { diasporaConfirmationEmail } from '@/lib/mail/templates'
 import {
+  DIASPORA_META,
   DIASPORA_QUESTIONS,
   diasporaSchema,
   firstInvalidQuestion,
@@ -118,7 +119,37 @@ describe('diasporaConfirmationEmail', () => {
     expect(email.text).toContain('Name of Country: <b>United Kingdom</b>')
     expect(email.html).not.toContain('<b>United Kingdom</b>')
   })
+
+  // Diaspora centres are not volunteers: nothing they receive may say so.
+  it('never calls the responder or the team "volunteer"', () => {
+    const email = diasporaConfirmationEmail({
+      reference: 'DSP-ABC234',
+      answers: [{ label: 'Name of Country', value: 'United Kingdom' }],
+    })
+    for (const part of [email.subject, email.html, email.text, senderName(email.from)]) {
+      expect(part).not.toMatch(/volunteer/i)
+    }
+  })
 })
+
+describe('diaspora wording', () => {
+  it('never says "volunteer" anywhere on the form', () => {
+    const strings = [...flatten(DIASPORA_META), ...DIASPORA_QUESTIONS.flatMap((q) => [q.label, q.hint ?? ''])]
+    for (const text of strings) expect(text).not.toMatch(/volunteer/i)
+  })
+})
+
+/** The display name of a "Name <address>" sender. */
+function senderName(from: string | undefined): string {
+  return (from ?? '').replace(/<[^>]*>/, '').trim()
+}
+
+function flatten(value: unknown): string[] {
+  if (typeof value === 'string') return [value]
+  if (Array.isArray(value)) return value.flatMap(flatten)
+  if (value && typeof value === 'object') return Object.values(value).flatMap(flatten)
+  return []
+}
 
 describe('diaspora references', () => {
   it('are short, prefixed and free of look-alike characters', () => {
